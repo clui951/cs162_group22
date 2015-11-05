@@ -60,9 +60,6 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
-  // char *state;
-  // file_name = strtok_r((char *)file_name, " ", &state);
-
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -221,7 +218,6 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 bool
 load (const char *file_name, void (**eip) (void), void **esp)
 {
-  // printf("in load, before everything\n");
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
@@ -234,6 +230,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (t->pagedir == NULL)
     goto done;
   process_activate ();
+
+  char *state;
+  file_name = strtok_r((char *)file_name, " ", &state);
 
   /* Open executable file. */
   file = filesys_open (file_name);
@@ -319,20 +318,19 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (!setup_stack (esp))
     goto done;
 
+  // printf("before loading anything on stack\n");
   /* Pushing arguments to stack. */
   char *argv[250];
   char *argv_addr[250];
   int argc = 0;
   int temp_argc;
 
-  char *state;
   char *token;
-  for (token = strtok_r((char *)file_name, " ", &state); token != NULL; token = strtok_r(NULL, " ", &state)) {
+  for (token = file_name; token != NULL; token = strtok_r(NULL, " ", &state)) {
     argv[argc++] = token;
   }
   argv[argc] = 0;
 
-  // printf("in load, before memcopy1\n");
   for (temp_argc = argc - 1; temp_argc >= 0; temp_argc--) {
     token = argv[temp_argc];
     *esp -= strlen(token) + 1;
@@ -340,15 +338,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     memcpy(*esp, token, strlen(token) + 1);
   }
   argv_addr[argc] = 0;
-  //   char *an_arg = argv[temp_argc]; // grab a arg
-  //   // int size = sizeof(*an_arg); // check if this is the right way to get string size
-  //   *esp -= strlen(an_arg) + 1; // move stack ptr by size
-  //   memcpy(*esp, an_arg, strlen(an_arg) + 1);
-  //   // **esp = *an_arg; // put arg data into place where stack ptr points
-  //   addr_on_stack[temp_argc--] = (char *) *esp; // save ptr to location on stack
-  // }
 
-  // printf("in load, before memcopy2\n");
   /* Pushes offset if it exists. */
   int offset = (size_t)*esp % 4;
   if (offset) {
@@ -356,33 +346,24 @@ load (const char *file_name, void (**eip) (void), void **esp)
     memcpy(*esp, &argv[argc], offset);
   }
 
-  // printf("in load, before memcopy3\n");
   for (temp_argc = argc; temp_argc >= 0; temp_argc--) {
-    // a_ptr = addr_on_stack[temp_argc]; // grab a ptr
     *esp -= sizeof(char *); // make space on stack for ptr
-    // **esp = a_ptr;
     memcpy(*esp, &argv_addr[temp_argc], sizeof(char *));
   }
-  // *esp -= sizeof(dumb);
-  // **esp = &a_ptr;   // argv, pointer to first arg_ptr in array
-  // memcpy(*esp, &a_ptr, sizeof(&a_ptr));
 
-  // printf("in load, before memcopy4\n");
   /* Push argv onto stack. */
   token = *esp;
   *esp -= sizeof(&token);
   memcpy(*esp, &token, sizeof(&token));
 
-  // printf("in load, before memcopy5\n");
   /* Push argc onto stack. */
   *esp -= sizeof(int);
-  // **esp = argc;
   memcpy(*esp, &argc, sizeof(int));
 
-  // printf("in load, before memcopy6\n");
   /* Push dummy return address. */
   *esp -= sizeof(void *);
   memcpy(*esp, &argv[argc], sizeof(void *));
+  // printf("after loading everything on stack\n");
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;

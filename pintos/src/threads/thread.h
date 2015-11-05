@@ -92,6 +92,8 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
+    struct file* file_des[128];          /* File descriptors. */
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 

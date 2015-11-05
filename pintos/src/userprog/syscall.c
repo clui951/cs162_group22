@@ -75,7 +75,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 				}
 			case SYS_WRITE: /* Write to a file. */
 				{
-					// printf("syscall number: %d %d %d %d\n", args[0], args[1], args[2], args[3]);
+					// printf("syscall number: %d file des: %d buffer: %d length: %d\n", args[0], args[1], args[2], args[3]);
 					write(args[1], args[2], args[3]);
 					// printf("System call number: %d\n", args[0]);
 					break;
@@ -142,9 +142,14 @@ write (int fd, const void *buffer, unsigned length)
 			putbuf(buffer, length);
 			return length;
 		}
-	// struct
-	// return file_write(thefile, buffer, length);
-	return length;
+	else if (fd > STDOUT_FILENO && fd < 128)
+	{
+		struct thread *current = thread_current();
+		struct file *file = current->file_des[fd];
+		return file_write(file, buffer, length);
+	}
+	else
+		exit(-1);
 }
 // void seek (int fd, unsigned position);
 // unsigned tell (int fd);
