@@ -14,9 +14,12 @@ static void syscall_handler (struct intr_frame *);
 void check_valid_pointer (const void *vaddr);
 struct file* get_file(int fd);
 
+struct lock file_lock;
+
 void
 syscall_init (void)
 {
+  lock_init(&file_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -25,6 +28,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 {
 	check_valid_pointer((const void*) f->esp);
 	uint32_t* args = ((uint32_t*) f->esp);
+
+
 	switch (*(int *)f->esp)
 		{
 			case SYS_HALT: /* Halt the operating system. */
@@ -39,7 +44,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 				}
 			case SYS_EXEC: /* Start another process. */
 				{
-					exec(args[1]);
+					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
+					f->eax = exec(args[1]);
 					break;
 				}
 			case SYS_WAIT: /* Wait for a child process to die. */
@@ -49,32 +55,38 @@ syscall_handler (struct intr_frame *f UNUSED)
 				}
 			case SYS_CREATE: /* Create a file. */
 				{
-					create(args[1], args[2]);
+					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
+					f->eax = create(args[1], args[2]);
 					break;
 				}
 			case SYS_REMOVE: /* Delete a file. */
 				{
-					remove(args[1]);
+					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
+					f->eax = remove(args[1]);
 					break;
 				}
 			case SYS_OPEN: /* Open a file. */
 				{
-					open(args[1]);
+					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
+					f->eax = open(args[1]);
 					break;
 				}
 			case SYS_FILESIZE: /* Obtain a file's size. */
 				{
-					filesize(args[1]);
+					// args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
+					f->eax = filesize(args[1]);
 					break;
 				}
 			case SYS_READ: /* Read from a file. */
 				{
-					read(args[1], args[2], args[3]);
+					// args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
+					f->eax = read(args[1], args[2], args[3]);
 					break;
 				}
 			case SYS_WRITE: /* Write to a file. */
 				{
-					write(args[1], args[2], args[3]);
+					// args[1] = (int) pagedir_get_page(thread_current()->pagedir, args[1]);
+					f->eax = write(args[1], args[2], args[3]);
 					break;
 				}
 			case SYS_SEEK: /* Change position in a file. */
@@ -89,6 +101,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 				}
 			case SYS_CLOSE: /* Close a file. */
 				{
+					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
 					close(args[1]);
 					break;
 				}
@@ -129,37 +142,63 @@ exec (const char *file)
 bool
 create (const char *file, unsigned initial_size)
 {
-	if (!file || !initial_size) {
+	if (!file || !initial_size)
 		exit(-1);
-	}
-	// if (initial_size == 0) {
-
-	// }
+	lock_acquire(&file_lock);
+	bool success = filesys_create(file, initial_size);
+	lock_release(&file_lock);
+	return success;
 }
 
 bool
 remove (const char *file)
 {
-	if (!file) {
+	if (!file)
 		exit(-1);
-	}
+	lock_acquire(&file_lock);
+	bool success = filesys_remove(file);
+	lock_release(&file_lock);
+	return success;
 }
 
 int
 open (const char *file)
 {
-	if (!file) {
+	if (!file)
 		exit(-1);
+	lock_acquire(&file_lock);
+	struct file *new_file = filesys_open(file);
+	if (!new_file)
+		{
+			lock_release(&file_lock);
+			exit(-1);
+		}
+	struct thread *current = thread_current();
+	int i;
+	for (i = 2; i < 128; i++) {
+		if (!current->file_des[i]) {
+			current->file_des[i] = new_file;
+			lock_release(&file_lock);
+			return i;
+		}
 	}
+	exit(-1);
 }
 
 int
 filesize (int fd)
 {
-	if (fd < 128)
+	if (fd < 128 && fd > 1)
 		{
+			lock_acquire(&file_lock);
 			struct file *file = thread_current()->file_des[fd];
-			return file_length(file);
+			if (!file) {
+				lock_release(&file_lock);
+				exit(-1);
+			}
+			int filesize = file_length(file);
+			lock_release(&file_lock);
+			return filesize;
 		}
 	else
 		exit(-1);
@@ -168,15 +207,27 @@ filesize (int fd)
 int
 read (int fd, void *buffer, unsigned length)
 {
-	if (fd == STDIN_FILENO)
+	if (!buffer)
+		{
+			exit(-1);
+		}
+	else if (fd == STDIN_FILENO)
 		{
 			return length;
 		}
 	else if (fd > STDOUT_FILENO && fd < 128)
 		{
+			lock_acquire(&file_lock);
 			struct thread *current = thread_current();
 			struct file *file = current->file_des[fd];
-			return file_read(file, length);
+			if (!file)
+				{
+					lock_release(&file_lock);
+					exit(-1);
+				}
+			int read = file_read(file, length);
+			lock_release(&file_lock);
+			return read;
 		}
 	else
 		exit(-1);
@@ -185,16 +236,28 @@ read (int fd, void *buffer, unsigned length)
 int
 write (int fd, const void *buffer, unsigned length)
 {
-	if (fd == STDOUT_FILENO)
+	if (!buffer)
+		{
+			exit(-1);
+		}
+	else if (fd == STDOUT_FILENO)
 		{
 			putbuf(buffer, length);
 			return length;
 		}
 	else if (fd > STDOUT_FILENO && fd < 128)
 		{
+			lock_acquire(&file_lock);
 			struct thread *current = thread_current();
 			struct file *file = current->file_des[fd];
-			return file_write(file, buffer, length);
+			if (!file)
+				{
+					lock_release(&file_lock);
+					exit(-1);
+				}
+			int write = file_write(file, buffer, length);
+			lock_release(&file_lock);
+			return write;
 		}
 	else
 		exit(-1);
@@ -208,6 +271,16 @@ close (int fd)
 {
 	if (fd < 2 || fd >= 128)
 		exit(-1);
+	lock_acquire(&file_lock);
+	struct thread *current = thread_current();
+	struct file *file = current->file_des[fd];
+	if (!file)
+		{
+			lock_release(&file_lock);
+			exit(-1);
+		}
+	file_close(file);
+	lock_release(&file_lock);
 }
 
 // int practice (int i);
