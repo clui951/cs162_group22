@@ -75,9 +75,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 				}
 			case SYS_WRITE: /* Write to a file. */
 				{
-					// printf("syscall number: %d file des: %d buffer: %d length: %d\n", args[0], args[1], args[2], args[3]);
 					write(args[1], args[2], args[3]);
-					// printf("System call number: %d\n", args[0]);
 					break;
 				}
 			case SYS_SEEK: /* Change position in a file. */
@@ -109,15 +107,6 @@ check_valid_pointer (const void *vaddr)
 	if (!is_user_vaddr(vaddr) || vaddr < MIN_VALID_VADDR)
 		exit(-1);
 }
-
-// struct file*
-// get_file(int fd)
-// {
-// 	struct thread *current = thread_current();
-
-// }
-
-// void halt (void);
 
 void
 exit (int status)
