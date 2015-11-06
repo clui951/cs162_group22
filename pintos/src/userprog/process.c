@@ -62,10 +62,10 @@ process_execute (const char *file_name)
 
   else
     {
-      struct file *file = filesys_open(file_name);
-      if (!file)
-        return -1;
-      file_deny_write(file);
+      // struct file *file = filesys_open(file_name);
+      // if (!file)
+      //   return -1;
+      // file_deny_write(file);
       child->pid = tid;
       child->has_waited = false;
       child->alive = 2;
