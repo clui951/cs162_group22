@@ -19,7 +19,6 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
-static struct semaphore temporary;
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -33,7 +32,6 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 
-  sema_init (&temporary, 0);
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -45,10 +43,12 @@ process_execute (const char *file_name)
   file_name = strtok_r((char *)file_name, " ", &state);
 
   struct child_thread *child;
-  child = calloc(sizeof(*child), 1);
+  child = calloc(sizeof(struct child_thread), 1);
+  sema_init(&child->child_sema, 0);
+  child->has_waited = false;
 
   struct aux *aux;
-  aux = calloc(sizeof(*aux), 1);
+  aux = calloc(sizeof(struct aux), 1);
   aux->fn_copy = fn_copy;
   aux->child = &child;
 
@@ -57,9 +57,9 @@ process_execute (const char *file_name)
   if (tid == TID_ERROR)
     {
       palloc_free_page (fn_copy);
+      free(child);
       free(aux);
     }
-
   else
     {
       // struct file *file = filesys_open(file_name);
@@ -67,13 +67,14 @@ process_execute (const char *file_name)
       //   return -1;
       // file_deny_write(file);
       child->pid = tid;
-      child->has_waited = false;
       child->alive = 2;
+      printf("get here <1>\n");
+      sema_down(&child->child_sema);
+      printf("get here <2>\n");
       // if (!child->exit_status)
       list_push_back(&thread_current()->children, &child->child_elem);
       // printf("process execute, successfully adds to list\n");
       // printf("process execute, right before sema_down\n");
-      // sema_down(&temporary);
       // printf("process execute, right after sema_down\n");
     }
   return tid;
@@ -84,7 +85,8 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  char *file_name = ((struct aux *)file_name_)->fn_copy;
+  struct aux *aux = file_name_;
+  char *file_name = aux->fn_copy;
   struct intr_frame if_;
   bool success;
 
@@ -93,13 +95,10 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  // printf("in start process, before load\n");
+  printf("in start process, before load\n");
   success = load (file_name, &if_.eip, &if_.esp);
-  // printf("in start process, after load\n");
-
-  // printf("start process, success: %d\n", success);
-  // if (success)
-  //   sema_down(&temporary);
+  printf("in start process, after load, success %d\n", success);
+  sema_up(&aux->child->child_sema);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -139,7 +138,6 @@ process_wait (tid_t child_tid UNUSED)
             {
               if (child->has_waited)
                 return -1;
-              sema_down (&temporary);
               child->has_waited = true;
               int status = child->exit_status;
               list_remove(el);
@@ -175,20 +173,24 @@ process_exit (void)
       pagedir_destroy (pd);
     }
 
+  // if (!&(cur->aux))
+
+
   struct list_elem *el;
   for (el = list_begin(&(cur->children)); el != list_end(&(cur->children)); el = list_next(el))
     {
       struct child_thread *child = list_entry(el, struct child_thread, child_elem);
       child->alive--;
+
       if (child->alive == 0)
         {
           list_remove(el);
           free(child);
         }
     }
-  // printf("process exit, right before sema_up\n");
-  sema_up (&temporary);
-  // printf("process exit, successfully sema_up\n");
+  printf("process exit before sema up\n");
+  sema_up(&(cur->aux->child->child_sema));
+  printf("process exit after sema up\n");
 }
 
 /* Sets up the CPU for running user code in the current
@@ -437,11 +439,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   done:
 
-  if (success)
-    sema_up(&temporary);
-
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+  // printf("in load, right before sema up\n");
+  // if (!&(t->aux))
+  // {
+  // sema_up(&(t->aux->child->child_sema));
+    // printf("hi<2>\n");
+  // }
   return success;
 }
 
