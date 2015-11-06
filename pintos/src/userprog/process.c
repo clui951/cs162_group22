@@ -44,10 +44,38 @@ process_execute (const char *file_name)
   char *state;
   file_name = strtok_r((char *)file_name, " ", &state);
 
+  struct child_thread *child;
+  child = calloc(sizeof(*child), 1);
+
+  struct aux *aux;
+  aux = calloc(sizeof(*aux), 1);
+  aux->fn_copy = fn_copy;
+  aux->child = &child;
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, aux);
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy);
+    {
+      palloc_free_page (fn_copy);
+      free(aux);
+    }
+
+  else
+    {
+      struct file *file = filesys_open(file_name);
+      if (!file)
+        return -1;
+      file_deny_write(file);
+      child->pid = tid;
+      child->has_waited = false;
+      child->alive = 2;
+      // if (!child->exit_status)
+      list_push_back(&thread_current()->children, &child->child_elem);
+      // printf("process execute, successfully adds to list\n");
+      // printf("process execute, right before sema_down\n");
+      // sema_down(&temporary);
+      // printf("process execute, right after sema_down\n");
+    }
   return tid;
 }
 
@@ -56,7 +84,7 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  char *file_name = file_name_;
+  char *file_name = ((struct aux *)file_name_)->fn_copy;
   struct intr_frame if_;
   bool success;
 
@@ -68,6 +96,10 @@ start_process (void *file_name_)
   // printf("in start process, before load\n");
   success = load (file_name, &if_.eip, &if_.esp);
   // printf("in start process, after load\n");
+
+  // printf("start process, success: %d\n", success);
+  // if (success)
+  //   sema_down(&temporary);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -96,7 +128,26 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED)
 {
-  sema_down (&temporary);
+  if (child_tid != TID_ERROR)
+    {
+      struct thread *current = thread_current();
+      struct list_elem *el;
+      for (el = list_begin(&(current->children)); el != list_end(&(current->children)); el = list_next(el))
+        {
+          struct child_thread *child = list_entry(el, struct child_thread, child_elem);
+          if (child->pid == child_tid)
+            {
+              if (child->has_waited)
+                return -1;
+              sema_down (&temporary);
+              child->has_waited = true;
+              int status = child->exit_status;
+              list_remove(el);
+              free(child);
+              return status;
+            }
+        }
+    }
   return 0;
 }
 
@@ -123,7 +174,21 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+  struct list_elem *el;
+  for (el = list_begin(&(cur->children)); el != list_end(&(cur->children)); el = list_next(el))
+    {
+      struct child_thread *child = list_entry(el, struct child_thread, child_elem);
+      child->alive--;
+      if (child->alive == 0)
+        {
+          list_remove(el);
+          free(child);
+        }
+    }
+  // printf("process exit, right before sema_up\n");
   sema_up (&temporary);
+  // printf("process exit, successfully sema_up\n");
 }
 
 /* Sets up the CPU for running user code in the current
@@ -371,6 +436,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
   success = true;
 
   done:
+
+  if (success)
+    sema_up(&temporary);
+
   /* We arrive here whether the load is successful or not. */
   file_close (file);
   return success;

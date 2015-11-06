@@ -92,7 +92,10 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
-    struct file* file_des[128];          /* File descriptors. */
+    struct file *file_des[128];          /* File descriptors. */
+    struct list children;
+    struct thread *parent;
+    struct aux *aux;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -105,6 +108,21 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
+
+struct child_thread
+{
+  bool has_waited;
+  int pid;
+  int alive;
+  int exit_status;
+  struct list_elem child_elem;
+};
+
+struct aux
+{
+  char *fn_copy;
+  struct child_thread *child;
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.

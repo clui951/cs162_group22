@@ -135,7 +135,10 @@ exit (int status)
 {
 	if (status < -1)
 		status = -1;
+	// printf("get to exit\n\n");
 	struct thread *current = thread_current();
+	if (current->aux->child)
+		current->aux->child->exit_status = status; // my current aux is my parent's knowledge of me as a child
 	printf("%s: exit(%d)\n", current->name, status);
 	thread_exit();
 }
@@ -147,6 +150,8 @@ exec (const char *file)
 	{
 		exit(-1);
 	}
+	// printf("finishes executing in syscall exec\n");
+	return process_execute(file);
 }
 
 int
@@ -155,7 +160,7 @@ wait (pid_t pid)
 	if (pid < 0) {
 		exit(-1);
 	}
-	return 0;
+	return process_wait(pid);
 }
 
 bool
