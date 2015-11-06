@@ -62,6 +62,7 @@ process_execute (const char *file_name)
     }
   else
     {
+      printf("successfully created thread\n");
       // struct file *file = filesys_open(file_name);
       // if (!file)
       //   return -1;

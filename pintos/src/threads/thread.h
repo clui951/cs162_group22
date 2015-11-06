@@ -116,6 +116,7 @@ struct child_thread
   int alive;
   int exit_status;
   struct list_elem child_elem;
+  struct semaphore child_sema;
 };
 
 struct aux
