@@ -28,13 +28,12 @@ syscall_handler (struct intr_frame *f UNUSED)
 {
 	check_valid_pointer((const void*) f->esp);
 	uint32_t* args = ((uint32_t*) f->esp);
-
-
+	// printf("current: %d, OPEN: %d, FS: %d, READ: %d, WRITE: %d, SEEK: %d, TELL: %d\n", args[0], SYS_OPEN, SYS_FILESIZE, SYS_WRITE, SYS_SEEK, SYS_TELL);
 	switch (*(int *)f->esp)
 		{
 			case SYS_HALT: /* Halt the operating system. */
 				{
-					// printf("System call number: %d\n", args[0]);
+					halt();
 					break;
 				}
 			case SYS_EXIT: /* Terminate this process. */
@@ -44,70 +43,74 @@ syscall_handler (struct intr_frame *f UNUSED)
 				}
 			case SYS_EXEC: /* Start another process. */
 				{
+					check_valid_pointer(args[1]);
 					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
 					f->eax = exec(args[1]);
 					break;
 				}
 			case SYS_WAIT: /* Wait for a child process to die. */
 				{
-					// printf("System call number: %d\n", args[0]);
+					f->eax = wait(args[1]);
 					break;
 				}
 			case SYS_CREATE: /* Create a file. */
 				{
+					check_valid_pointer(args[1]);
 					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
 					f->eax = create(args[1], args[2]);
 					break;
 				}
 			case SYS_REMOVE: /* Delete a file. */
 				{
+					check_valid_pointer(args[1]);
 					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
 					f->eax = remove(args[1]);
 					break;
 				}
 			case SYS_OPEN: /* Open a file. */
 				{
+					check_valid_pointer(args[1]);
 					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
 					f->eax = open(args[1]);
 					break;
 				}
 			case SYS_FILESIZE: /* Obtain a file's size. */
 				{
-					// args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
 					f->eax = filesize(args[1]);
 					break;
 				}
 			case SYS_READ: /* Read from a file. */
 				{
-					// args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
+					check_valid_pointer(args[2]);
+					check_valid_pointer(args[2] + args[3]);
+					args[2] = pagedir_get_page(thread_current()->pagedir, args[2]);
 					f->eax = read(args[1], args[2], args[3]);
 					break;
 				}
 			case SYS_WRITE: /* Write to a file. */
 				{
-					// args[1] = (int) pagedir_get_page(thread_current()->pagedir, args[1]);
+					check_valid_pointer(args[2]);
+					check_valid_pointer(args[2] + args[3]);
+					args[2] = pagedir_get_page(thread_current()->pagedir, args[2]);
 					f->eax = write(args[1], args[2], args[3]);
 					break;
 				}
 			case SYS_SEEK: /* Change position in a file. */
 				{
-					// printf("System call number: %d\n", args[0]);
 					break;
 				}
 			case SYS_TELL: /* Report current position in a file. */
 				{
-					// printf("System call number: %d\n", args[0]);
 					break;
 				}
 			case SYS_CLOSE: /* Close a file. */
 				{
-					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
 					close(args[1]);
 					break;
 				}
 			case SYS_PRACTICE: /* Returns arg incremented by 1 */
 				{
-					// printf("System call number: %d\n", args[0]);
+					practice(args[1]);
 					break;
 				}
 		}
@@ -116,13 +119,22 @@ syscall_handler (struct intr_frame *f UNUSED)
 void
 check_valid_pointer (const void *vaddr)
 {
-	if (!is_user_vaddr(vaddr) || vaddr < MIN_VALID_VADDR)
+	// printf("vaddr %d, MIN_VALID_VADDR %d, PHYS_BASE %d\n", vaddr, MIN_VALID_VADDR, PHYS_BASE);
+	if (vaddr < MIN_VALID_VADDR || !is_user_vaddr(vaddr))
 		exit(-1);
+}
+
+void
+halt (void)
+{
+	shutdown_power_off();
 }
 
 void
 exit (int status)
 {
+	if (status < -1)
+		status = -1;
 	struct thread *current = thread_current();
 	printf("%s: exit(%d)\n", current->name, status);
 	thread_exit();
@@ -137,12 +149,19 @@ exec (const char *file)
 	}
 }
 
-// int wait (pid_t pid);
+int
+wait (pid_t pid)
+{
+	if (pid < 0) {
+		exit(-1);
+	}
+	return 0;
+}
 
 bool
 create (const char *file, unsigned initial_size)
 {
-	if (!file || !initial_size)
+	if (!file)
 		exit(-1);
 	lock_acquire(&file_lock);
 	bool success = filesys_create(file, initial_size);
@@ -171,7 +190,7 @@ open (const char *file)
 	if (!new_file)
 		{
 			lock_release(&file_lock);
-			exit(-1);
+			return -1;
 		}
 	struct thread *current = thread_current();
 	int i;
@@ -182,20 +201,21 @@ open (const char *file)
 			return i;
 		}
 	}
-	exit(-1);
+	return -1;
 }
 
 int
 filesize (int fd)
 {
-	if (fd < 128 && fd > 1)
+	if (fd < 128 && fd >1)
 		{
 			lock_acquire(&file_lock);
 			struct file *file = thread_current()->file_des[fd];
-			if (!file) {
-				lock_release(&file_lock);
-				exit(-1);
-			}
+			if (!file)
+				{
+					lock_release(&file_lock);
+					return -1;
+				}
 			int filesize = file_length(file);
 			lock_release(&file_lock);
 			return filesize;
@@ -207,14 +227,8 @@ filesize (int fd)
 int
 read (int fd, void *buffer, unsigned length)
 {
-	if (!buffer)
-		{
-			exit(-1);
-		}
-	else if (fd == STDIN_FILENO)
-		{
-			return length;
-		}
+	if (fd == STDIN_FILENO)
+		return length;
 	else if (fd > STDOUT_FILENO && fd < 128)
 		{
 			lock_acquire(&file_lock);
@@ -223,23 +237,21 @@ read (int fd, void *buffer, unsigned length)
 			if (!file)
 				{
 					lock_release(&file_lock);
-					exit(-1);
+					return -1;
 				}
-			int read = file_read(file, length);
+			int read = file_read(file, buffer, length);
 			lock_release(&file_lock);
 			return read;
 		}
 	else
-		exit(-1);
+		return -1;
 }
 
 int
 write (int fd, const void *buffer, unsigned length)
 {
 	if (!buffer)
-		{
-			exit(-1);
-		}
+		exit(-1);
 	else if (fd == STDOUT_FILENO)
 		{
 			putbuf(buffer, length);
@@ -253,8 +265,9 @@ write (int fd, const void *buffer, unsigned length)
 			if (!file)
 				{
 					lock_release(&file_lock);
-					exit(-1);
+					return -1;
 				}
+
 			int write = file_write(file, buffer, length);
 			lock_release(&file_lock);
 			return write;
@@ -263,13 +276,22 @@ write (int fd, const void *buffer, unsigned length)
 		exit(-1);
 }
 
-// void seek (int fd, unsigned position);
-// unsigned tell (int fd);
+void
+seek (int fd, unsigned position)
+{
+
+}
+
+unsigned
+tell (int fd)
+{
+
+}
 
 void
 close (int fd)
 {
-	if (fd < 2 || fd >= 128)
+	if (fd < 2 || fd > 127)
 		exit(-1);
 	lock_acquire(&file_lock);
 	struct thread *current = thread_current();
@@ -277,10 +299,15 @@ close (int fd)
 	if (!file)
 		{
 			lock_release(&file_lock);
-			exit(-1);
+			return -1;
 		}
 	file_close(file);
+	current->file_des[fd] = 0;
 	lock_release(&file_lock);
 }
 
-// int practice (int i);
+int
+practice (int i)
+{
+	return i++;
+}
