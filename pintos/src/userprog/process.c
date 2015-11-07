@@ -66,12 +66,12 @@ process_execute (const char *file_name)
   else
     {
       // printf("successfully created thread\n");
-      struct file *file = filesys_open(file_name);
-      struct thread *cur = thread_current ();
-      if (!file)
-        return -1;
-      cur->executable = file;
-      file_deny_write(file);
+      // struct file *file = filesys_open(file_name);
+      // struct thread *cur = thread_current ();
+      // if (!file)
+      //   return -1;
+      // cur->executable = file;
+      // file_deny_write(file);
       child->pid = tid;
       child->alive = 2;
       // printf("before executing\n");
@@ -196,11 +196,11 @@ process_exit (void)
         child->alive--;
     }
 
-  if (cur->executable != NULL)
-  {
-    file_allow_write(cur->executable);
-    file_close(cur->executable);
-  }
+  // if (cur->executable != NULL)
+  // {
+  //   file_allow_write(cur->executable);
+  //   file_close(cur->executable);
+  // }
 
   sema_up(&(cur->aux->child->child_sema));
 }
