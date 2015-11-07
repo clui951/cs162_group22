@@ -52,39 +52,21 @@ process_execute (const char *file_name)
   aux->fn_copy = fn_copy;
   aux->child = child;
 
-  // printf("child->alive %d\n", child->alive);
-
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, aux);
   if (tid == TID_ERROR)
     {
-      // printf("not created\n");
       palloc_free_page (fn_copy);
       free(child);
       free(aux);
     }
   else
     {
-      // printf("successfully created thread\n");
-      // struct file *file = filesys_open(file_name);
-      // struct thread *cur = thread_current ();
-      // if (!file)
-      //   return -1;
-      // cur->executable = file;
-      // file_deny_write(file);
       child->pid = tid;
       child->alive = 2;
-      // printf("before executing\n");
       sema_down(&child->child_sema);
-      // printf("executing\n");
-      // if (!child->exit_status)
       list_push_back(&thread_current()->children, &child->child_elem);
-      // printf("process execute, successfully adds to list\n");
-
-      // printf("process execute, right before sema_down\n");
-      // printf("process execute, right after sema_down\n");
     }
-  // printf("%d\n", tid);
   return tid;
 }
 
@@ -97,16 +79,13 @@ start_process (void *file_name_)
   char *file_name = aux->fn_copy;
   struct intr_frame if_;
   bool success;
-  // printf("filename %s\n", file_name);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  // printf("in start process, before load\n");
   success = load (file_name, &if_.eip, &if_.esp);
-  // printf("in start process, after load, success %d\n", success);
   sema_up(&aux->child->child_sema);
 
   /* If load failed, quit. */
@@ -195,13 +174,10 @@ process_exit (void)
       else
         child->alive--;
     }
-
-  // if (cur->executable != NULL)
-  // {
-  //   file_allow_write(cur->executable);
-  //   file_close(cur->executable);
-  // }
-
+  if (cur->executable != NULL)
+  {
+    file_close(cur->executable);
+  }
   sema_up(&(cur->aux->child->child_sema));
 }
 
@@ -320,6 +296,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done;
     }
+  file_deny_write(file);
+  t->executable = file;
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -397,7 +375,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (!setup_stack (esp))
     goto done;
 
-  // printf("before loading anything on stack\n");
   /* Pushing arguments to stack. */
   char *argv[250];
   char *argv_addr[250];
@@ -426,7 +403,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   }
 
   for (temp_argc = argc; temp_argc >= 0; temp_argc--) {
-    *esp -= sizeof(char *); // make space on stack for ptr
+    *esp -= sizeof(char *);
     memcpy(*esp, &argv_addr[temp_argc], sizeof(char *));
   }
 
@@ -442,7 +419,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Push dummy return address. */
   *esp -= sizeof(void *);
   memcpy(*esp, &argv[argc], sizeof(void *));
-  // printf("after loading everything on stack\n");
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -451,14 +427,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   done:
 
-  /* We arrive here whether the load is successful or not. */
-  file_close (file);
-  // printf("in load, right before sema up\n");
-  // if (!&(t->aux))
-  // {
-  // sema_up(&(t->aux->child->child_sema));
-    // printf("hi<2>\n");
-  // }
   return success;
 }
 

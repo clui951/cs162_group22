@@ -28,58 +28,57 @@ syscall_handler (struct intr_frame *f UNUSED)
 {
 	check_valid_pointer((const void*) f->esp);
 	uint32_t* args = ((uint32_t*) f->esp);
-	// printf("current: %d, OPEN: %d, FS: %d, READ: %d, WRITE: %d, SEEK: %d, TELL: %d\n", args[0], SYS_OPEN, SYS_FILESIZE, SYS_WRITE, SYS_SEEK, SYS_TELL);
 	switch (*(int *)f->esp)
 		{
-			case SYS_HALT: /* Halt the operating system. */
+			case SYS_HALT:
 				{
 					halt();
 					break;
 				}
-			case SYS_EXIT: /* Terminate this process. */
+			case SYS_EXIT:
 				{
 					exit(args[1]);
 					break;
 				}
-			case SYS_EXEC: /* Start another process. */
+			case SYS_EXEC:
 				{
 					check_valid_pointer(args[1]);
 					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
 					f->eax = exec(args[1]);
 					break;
 				}
-			case SYS_WAIT: /* Wait for a child process to die. */
+			case SYS_WAIT:
 				{
 					f->eax = wait(args[1]);
 					break;
 				}
-			case SYS_CREATE: /* Create a file. */
+			case SYS_CREATE:
 				{
 					check_valid_pointer(args[1]);
 					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
 					f->eax = create(args[1], args[2]);
 					break;
 				}
-			case SYS_REMOVE: /* Delete a file. */
+			case SYS_REMOVE:
 				{
 					check_valid_pointer(args[1]);
 					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
 					f->eax = remove(args[1]);
 					break;
 				}
-			case SYS_OPEN: /* Open a file. */
+			case SYS_OPEN:
 				{
 					check_valid_pointer(args[1]);
 					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
 					f->eax = open(args[1]);
 					break;
 				}
-			case SYS_FILESIZE: /* Obtain a file's size. */
+			case SYS_FILESIZE:
 				{
 					f->eax = filesize(args[1]);
 					break;
 				}
-			case SYS_READ: /* Read from a file. */
+			case SYS_READ:
 				{
 					check_valid_pointer(args[2]);
 					check_valid_pointer(args[2] + args[3]);
@@ -87,7 +86,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 					f->eax = read(args[1], args[2], args[3]);
 					break;
 				}
-			case SYS_WRITE: /* Write to a file. */
+			case SYS_WRITE:
 				{
 					check_valid_pointer(args[2]);
 					check_valid_pointer(args[2] + args[3]);
@@ -95,22 +94,22 @@ syscall_handler (struct intr_frame *f UNUSED)
 					f->eax = write(args[1], args[2], args[3]);
 					break;
 				}
-			case SYS_SEEK: /* Change position in a file. */
+			case SYS_SEEK:
 				{
 					seek(args[1], args[2]);
 					break;
 				}
-			case SYS_TELL: /* Report current position in a file. */
+			case SYS_TELL:
 				{
 					f->eax = tell(args[1]);
 					break;
 				}
-			case SYS_CLOSE: /* Close a file. */
+			case SYS_CLOSE:
 				{
 					close(args[1]);
 					break;
 				}
-			case SYS_PRACTICE: /* Returns arg incremented by 1 */
+			case SYS_PRACTICE:
 				{
 					f->eax = practice(args[1]);
 					break;
@@ -121,7 +120,6 @@ syscall_handler (struct intr_frame *f UNUSED)
 void
 check_valid_pointer (const void *vaddr)
 {
-	// printf("vaddr %d, MIN_VALID_VADDR %d, PHYS_BASE %d\n", vaddr, MIN_VALID_VADDR, PHYS_BASE);
 	if (vaddr < MIN_VALID_VADDR || !is_user_vaddr(vaddr))
 		exit(-1);
 }
@@ -137,10 +135,9 @@ exit (int status)
 {
 	if (status < -1)
 		status = -1;
-	// printf("get to exit\n\n");
 	struct thread *current = thread_current();
 	if (current->aux->child)
-		current->aux->child->exit_status = status; // my current aux is my parent's knowledge of me as a child
+		current->aux->child->exit_status = status;
 	printf("%s: exit(%d)\n", current->name, status);
 	thread_exit();
 }
@@ -149,20 +146,15 @@ pid_t
 exec (const char *file)
 {
 	if (!file)
-	{
 		return -1;
-	}
-	// printf("syscall.c exec: starting to execute\n");
-	// printf("finishes executing in syscall exec\n");
 	return process_execute(file);
 }
 
 int
 wait (pid_t pid)
 {
-	if (pid < 0) {
+	if (pid < 0)
 		return -1;
-	}
 	return process_wait(pid);
 }
 
@@ -202,13 +194,15 @@ open (const char *file)
 		}
 	struct thread *current = thread_current();
 	int i;
-	for (i = 2; i < 128; i++) {
-		if (!current->file_des[i]) {
-			current->file_des[i] = new_file;
-			lock_release(&file_lock);
-			return i;
+	for (i = 2; i < 128; i++)
+		{
+			if (!current->file_des[i])
+				{
+					current->file_des[i] = new_file;
+					lock_release(&file_lock);
+					return i;
+				}
 		}
-	}
 	lock_release(&file_lock);
 	return -1;
 }
@@ -278,7 +272,6 @@ write (int fd, const void *buffer, unsigned length)
 					lock_release(&file_lock);
 					return -1;
 				}
-			// file_allow_write(file);
 			int write = file_write(file, buffer, length);
 			lock_release(&file_lock);
 			return write;
@@ -347,6 +340,5 @@ close (int fd)
 int
 practice (int i)
 {
-	// printf("%d\n", i);
 	return i + 1;
 }

@@ -149,11 +149,10 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;{}
 
-  if (is_user_vaddr(fault_addr)) {
+  if (!is_user_vaddr((int*)fault_addr))
     exit(-1);
-  } else if (pagedir_get_page(thread_current()->pagedir, fault_addr)) {
+  else if (!pagedir_get_page(thread_current()->pagedir, (int*)fault_addr))
     exit(-1);
-  }
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
