@@ -207,6 +207,7 @@ open (const char *file)
 			return i;
 		}
 	}
+	lock_release(&file_lock);
 	return -1;
 }
 
@@ -285,13 +286,40 @@ write (int fd, const void *buffer, unsigned length)
 void
 seek (int fd, unsigned position)
 {
-
+	if (fd < 128 && fd > 1)
+		{
+			lock_acquire(&file_lock);
+			struct file *file = thread_current()->file_des[fd];
+			if (!file)
+				{
+					lock_release(&file_lock);
+					return -1;
+				}
+			file_seek(file, position);
+			lock_release(&file_lock);
+		}
+	else
+		exit(-1);
 }
 
 unsigned
 tell (int fd)
 {
-
+	if (fd < 128 && fd > 1)
+		{
+			lock_acquire(&file_lock);
+			struct file *file = thread_current()->file_des[fd];
+			if (!file)
+				{
+					lock_release(&file_lock);
+					return -1;
+				}
+			int file_pos = file_tell(file);
+			lock_release(&file_lock);
+			return file_pos;
+		}
+	else
+		exit(-1);
 }
 
 void
