@@ -66,9 +66,9 @@ process_execute (const char *file_name)
   else
     {
       // printf("successfully created thread\n");
-      struct file *file = filesys_open(file_name);
-      if (!file)
-        return -1;
+      // struct file *file = filesys_open(file_name);
+      // if (!file)
+      //   return -1;
       // file_deny_write(file);
       child->pid = tid;
       child->alive = 2;
