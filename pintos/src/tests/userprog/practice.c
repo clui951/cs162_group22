@@ -7,7 +7,9 @@
 void
 test_main (void)
 {
+  // printf("%d\n", practice(5));
   int i = practice(5);
+  // printf("%d\n", i);
   if (i != 6) {
     fail("Practice syscall failed because i was not 6 as expected\n");
   }

@@ -93,6 +93,7 @@ struct thread
     struct list_elem allelem;           /* List element for all threads list. */
 
     struct file *file_des[128];          /* File descriptors. */
+    struct file *executable;
     struct list children;
     struct thread *parent;
     struct aux *aux;
