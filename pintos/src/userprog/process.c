@@ -62,10 +62,10 @@ process_execute (const char *file_name)
     }
   else
     {
-      printf("successfully created thread\n");
-      // struct file *file = filesys_open(file_name);
-      // if (!file)
-      //   return -1;
+      // printf("successfully created thread\n");
+      struct file *file = filesys_open(file_name);
+      if (!file)
+        return -1;
       // file_deny_write(file);
       child->pid = tid;
       child->alive = 2;
@@ -75,9 +75,11 @@ process_execute (const char *file_name)
       // if (!child->exit_status)
       list_push_back(&thread_current()->children, &child->child_elem);
       // printf("process execute, successfully adds to list\n");
+
       // printf("process execute, right before sema_down\n");
       // printf("process execute, right after sema_down\n");
     }
+  // printf("%d\n", tid);
   return tid;
 }
 
@@ -90,6 +92,7 @@ start_process (void *file_name_)
   char *file_name = aux->fn_copy;
   struct intr_frame if_;
   bool success;
+  // printf("filename %s\n", file_name);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -139,6 +142,7 @@ process_wait (tid_t child_tid UNUSED)
             {
               if (child->has_waited)
                 return -1;
+              sema_down(&child->child_sema);
               child->has_waited = true;
               int status = child->exit_status;
               list_remove(el);
@@ -147,7 +151,7 @@ process_wait (tid_t child_tid UNUSED)
             }
         }
     }
-  return 0;
+  return -1;
 }
 
 /* Free the current process's resources. */

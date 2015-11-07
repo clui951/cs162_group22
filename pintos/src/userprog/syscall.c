@@ -150,7 +150,7 @@ exec (const char *file)
 	{
 		exit(-1);
 	}
-	printf("syscall.c exec: starting to execute\n");
+	// printf("syscall.c exec: starting to execute\n");
 	// printf("finishes executing in syscall exec\n");
 	return process_execute(file);
 }
