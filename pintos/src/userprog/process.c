@@ -52,10 +52,13 @@ process_execute (const char *file_name)
   aux->fn_copy = fn_copy;
   aux->child = child;
 
+  // printf("child->alive %d\n", child->alive);
+
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, aux);
   if (tid == TID_ERROR)
     {
+      // printf("not created\n");
       palloc_free_page (fn_copy);
       free(child);
       free(aux);
@@ -69,9 +72,9 @@ process_execute (const char *file_name)
       // file_deny_write(file);
       child->pid = tid;
       child->alive = 2;
-      // printf("get here <1>\n");
+      // printf("before executing\n");
       sema_down(&child->child_sema);
-      // printf("get here <2>\n");
+      // printf("executing\n");
       // if (!child->exit_status)
       list_push_back(&thread_current()->children, &child->child_elem);
       // printf("process execute, successfully adds to list\n");
@@ -178,24 +181,19 @@ process_exit (void)
       pagedir_destroy (pd);
     }
 
-  // if (!&(cur->aux))
-
-
   struct list_elem *el;
   for (el = list_begin(&(cur->children)); el != list_end(&(cur->children)); el = list_next(el))
     {
       struct child_thread *child = list_entry(el, struct child_thread, child_elem);
-      child->alive--;
-
       if (child->alive == 0)
         {
           list_remove(el);
           free(child);
         }
+      else
+        child->alive--;
     }
-  // printf("process exit before sema up\n");
   sema_up(&(cur->aux->child->child_sema));
-  // printf("process exit after sema up\n");
 }
 
 /* Sets up the CPU for running user code in the current
