@@ -45,7 +45,6 @@ process_execute (const char *file_name)
   struct child_thread *child;
   child = calloc(sizeof(struct child_thread), 1);
   sema_init(&child->child_sema, 0);
-  child->has_waited = false;
 
   struct aux *aux;
   aux = calloc(sizeof(struct aux), 1);
@@ -119,15 +118,14 @@ process_wait (tid_t child_tid UNUSED)
     {
       struct thread *current = thread_current();
       struct list_elem *el;
-      for (el = list_begin(&(current->children)); el != list_end(&(current->children)); el = list_next(el))
+      for (el = list_begin(&(current->children));
+           el != list_end(&(current->children)); el = list_next(el))
         {
-          struct child_thread *child = list_entry(el, struct child_thread, child_elem);
+          struct child_thread *child = list_entry(el, struct child_thread,
+                                                  child_elem);
           if (child->pid == child_tid)
             {
-              if (child->has_waited)
-                return -1;
               sema_down(&child->child_sema);
-              child->has_waited = true;
               int status = child->exit_status;
               list_remove(el);
               free(child);
@@ -163,9 +161,11 @@ process_exit (void)
     }
 
   struct list_elem *el;
-  for (el = list_begin(&(cur->children)); el != list_end(&(cur->children)); el = list_next(el))
+  for (el = list_begin(&(cur->children)); el != list_end(&(cur->children));
+       el = list_next(el))
     {
-      struct child_thread *child = list_entry(el, struct child_thread, child_elem);
+      struct child_thread *child = list_entry(el, struct child_thread,
+                                              child_elem);
       if (child->alive == 0)
         {
           list_remove(el);
@@ -175,9 +175,7 @@ process_exit (void)
         child->alive--;
     }
   if (cur->executable != NULL)
-  {
     file_close(cur->executable);
-  }
   sema_up(&(cur->aux->child->child_sema));
 }
 

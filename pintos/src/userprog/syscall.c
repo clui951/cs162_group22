@@ -12,8 +12,8 @@
 
 static void syscall_handler (struct intr_frame *);
 void check_valid_pointer (const void *vaddr);
-struct file* get_file(int fd);
 
+/* Lock for files. */
 struct lock file_lock;
 
 void
@@ -117,6 +117,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 		}
 }
 
+/* Checks whether the pointer is in valid userspace. */
 void
 check_valid_pointer (const void *vaddr)
 {
@@ -136,8 +137,10 @@ exit (int status)
 	if (status < -1)
 		status = -1;
 	struct thread *current = thread_current();
+	lock_acquire(&file_lock);
 	if (current->aux->child)
 		current->aux->child->exit_status = status;
+	lock_release(&file_lock);
 	printf("%s: exit(%d)\n", current->name, status);
 	thread_exit();
 }
@@ -147,6 +150,25 @@ exec (const char *file)
 {
 	if (!file)
 		return -1;
+	lock_acquire(&file_lock);
+	char *state;
+	char *fn_copy;
+	fn_copy = palloc_get_page (0);
+	if (fn_copy == NULL)
+	  return TID_ERROR;
+	strlcpy (fn_copy, file, PGSIZE);
+	fn_copy = strtok_r(fn_copy, " ", &state);
+	struct file *open_file = filesys_open(fn_copy);
+	if (!open_file)
+		{
+			palloc_free_page (fn_copy);
+			file_close(open_file);
+			lock_release(&file_lock);
+		  return -1;
+		}
+	palloc_free_page (fn_copy);
+	file_close(open_file);
+	lock_release(&file_lock);
 	return process_execute(file);
 }
 

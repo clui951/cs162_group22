@@ -93,10 +93,9 @@ struct thread
     struct list_elem allelem;           /* List element for all threads list. */
 
     struct file *file_des[128];          /* File descriptors. */
-    struct file *executable;
-    struct list children;
-    struct thread *parent;
-    struct aux *aux;
+    struct file *executable;             /* The current executable. */
+    struct list children;                /* List of thread's children. */
+    struct aux *aux;                     /* Auxiliary information. */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -110,20 +109,21 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
+/* Child thread struct for exec and wait. */
 struct child_thread
 {
-  bool has_waited;
-  int pid;
-  int alive;
-  int exit_status;
-  struct list_elem child_elem;
-  struct semaphore child_sema;
+  int pid;                              /* PID for child thread. */
+  int alive;                            /* Count for parent and child being alive. */
+  int exit_status;                      /* Exit status of the child thread. */
+  struct list_elem child_elem;          /* List element. */
+  struct semaphore child_sema;          /* Semaphore for parent-child pair. */
 };
 
+/* Struct for auxiliary information. */
 struct aux
 {
-  char *fn_copy;
-  struct child_thread *child;
+  char *fn_copy;                        /* Filename copy. */
+  struct child_thread *child;           /* Pointer to child thread. */
 };
 
 /* If false (default), use round-robin scheduler.
