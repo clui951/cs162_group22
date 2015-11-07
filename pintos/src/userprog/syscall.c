@@ -97,10 +97,12 @@ syscall_handler (struct intr_frame *f UNUSED)
 				}
 			case SYS_SEEK: /* Change position in a file. */
 				{
+					seek(args[1], args[2]);
 					break;
 				}
 			case SYS_TELL: /* Report current position in a file. */
 				{
+					f->eax = tell(args[1]);
 					break;
 				}
 			case SYS_CLOSE: /* Close a file. */
@@ -110,7 +112,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 				}
 			case SYS_PRACTICE: /* Returns arg incremented by 1 */
 				{
-					practice(args[1]);
+					f->eax = practice(args[1]);
 					break;
 				}
 		}
@@ -148,7 +150,7 @@ exec (const char *file)
 {
 	if (!file)
 	{
-		exit(-1);
+		return -1;
 	}
 	// printf("syscall.c exec: starting to execute\n");
 	// printf("finishes executing in syscall exec\n");
@@ -159,7 +161,7 @@ int
 wait (pid_t pid)
 {
 	if (pid < 0) {
-		exit(-1);
+		return -1;
 	}
 	return process_wait(pid);
 }
@@ -228,13 +230,15 @@ filesize (int fd)
 			return filesize;
 		}
 	else
-		exit(-1);
+		return -1;
 }
 
 int
 read (int fd, void *buffer, unsigned length)
 {
-	if (fd == STDIN_FILENO)
+	if (!buffer)
+		return -1;
+	else if (fd == STDIN_FILENO)
 		return length;
 	else if (fd > STDOUT_FILENO && fd < 128)
 		{
@@ -274,13 +278,13 @@ write (int fd, const void *buffer, unsigned length)
 					lock_release(&file_lock);
 					return -1;
 				}
-
+			// file_allow_write(file);
 			int write = file_write(file, buffer, length);
 			lock_release(&file_lock);
 			return write;
 		}
 	else
-		exit(-1);
+		return -1;
 }
 
 void
@@ -293,7 +297,7 @@ seek (int fd, unsigned position)
 			if (!file)
 				{
 					lock_release(&file_lock);
-					return -1;
+					exit(-1);
 				}
 			file_seek(file, position);
 			lock_release(&file_lock);
@@ -319,7 +323,7 @@ tell (int fd)
 			return file_pos;
 		}
 	else
-		exit(-1);
+		return -1;
 }
 
 void
@@ -333,7 +337,7 @@ close (int fd)
 	if (!file)
 		{
 			lock_release(&file_lock);
-			return -1;
+			exit(-1);
 		}
 	file_close(file);
 	current->file_des[fd] = 0;
@@ -343,5 +347,6 @@ close (int fd)
 int
 practice (int i)
 {
-	return i++;
+	// printf("%d\n", i);
+	return i + 1;
 }
