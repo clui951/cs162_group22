@@ -1,12 +1,17 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+#include <string.h>
 #include <user/syscall.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/palloc.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
 #include "userprog/process.h"
 #include "userprog/pagedir.h"
+#include "devices/shutdown.h"
 
 #define MIN_VALID_VADDR ((void *) 0x08048000)
 
@@ -26,7 +31,7 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED)
 {
-	check_valid_pointer((const void*) f->esp);
+	check_valid_pointer((const void *)f->esp);
 	uint32_t* args = ((uint32_t*) f->esp);
 	switch (*(int *)f->esp)
 		{
@@ -42,9 +47,10 @@ syscall_handler (struct intr_frame *f UNUSED)
 				}
 			case SYS_EXEC:
 				{
-					check_valid_pointer(args[1]);
-					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
-					f->eax = exec(args[1]);
+					check_valid_pointer((const void *)args[1]);
+					args[1] = (int)pagedir_get_page(thread_current()->pagedir,
+													(const void *)args[1]);
+					f->eax = exec((const char *)args[1]);
 					break;
 				}
 			case SYS_WAIT:
@@ -54,23 +60,26 @@ syscall_handler (struct intr_frame *f UNUSED)
 				}
 			case SYS_CREATE:
 				{
-					check_valid_pointer(args[1]);
-					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
-					f->eax = create(args[1], args[2]);
+					check_valid_pointer((const void *)args[1]);
+					args[1] = (int)pagedir_get_page(thread_current()->pagedir,
+													(const void *)args[1]);
+					f->eax = create((const char *)args[1], args[2]);
 					break;
 				}
 			case SYS_REMOVE:
 				{
-					check_valid_pointer(args[1]);
-					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
-					f->eax = remove(args[1]);
+					check_valid_pointer((const void *)args[1]);
+					args[1] = (int)pagedir_get_page(thread_current()->pagedir,
+													(const void *)args[1]);
+					f->eax = remove((const char *)args[1]);
 					break;
 				}
 			case SYS_OPEN:
 				{
-					check_valid_pointer(args[1]);
-					args[1] = pagedir_get_page(thread_current()->pagedir, args[1]);
-					f->eax = open(args[1]);
+					check_valid_pointer((const void *)args[1]);
+					args[1] = (int)pagedir_get_page(thread_current()->pagedir,
+													(const void *)args[1]);
+					f->eax = open((const char *)args[1]);
 					break;
 				}
 			case SYS_FILESIZE:
@@ -80,18 +89,20 @@ syscall_handler (struct intr_frame *f UNUSED)
 				}
 			case SYS_READ:
 				{
-					check_valid_pointer(args[2]);
-					check_valid_pointer(args[2] + args[3]);
-					args[2] = pagedir_get_page(thread_current()->pagedir, args[2]);
-					f->eax = read(args[1], args[2], args[3]);
+					check_valid_pointer((const void *)args[2]);
+					check_valid_pointer((const void *)args[2] + args[3]);
+					args[2] = (int)pagedir_get_page(thread_current()->pagedir,
+													(const void *)args[2]);
+					f->eax = read(args[1], (void *)args[2], args[3]);
 					break;
 				}
 			case SYS_WRITE:
 				{
-					check_valid_pointer(args[2]);
-					check_valid_pointer(args[2] + args[3]);
-					args[2] = pagedir_get_page(thread_current()->pagedir, args[2]);
-					f->eax = write(args[1], args[2], args[3]);
+					check_valid_pointer((const void *)args[2]);
+					check_valid_pointer((const void *)args[2] + args[3]);
+					args[2] = (int)pagedir_get_page(thread_current()->pagedir,
+													(const void *)args[2]);
+					f->eax = write(args[1], (void *)args[2], args[3]);
 					break;
 				}
 			case SYS_SEEK:
@@ -138,13 +149,8 @@ exit (int status)
 		status = -1;
 	struct thread *current = thread_current();
 	lock_acquire(&file_lock);
-	// printf("outside if statement, %d ;", status);
 	if (current->child)
-		{
-			// printf("in if statement, %d", status);
-			current->child->exit_status = status;
-		}
-	// printf("\n");
+		current->child->exit_status = status;
 	lock_release(&file_lock);
 	printf("%s: exit(%d)\n", current->name, status);
 	thread_exit();
@@ -175,7 +181,6 @@ exec (const char *file)
 	file_close(open_file);
 	int pid = process_execute(file);
 	lock_release(&file_lock);
-	// printf("in exec - file: %s, pid %d\n", file, pid);
 	return pid;
 }
 

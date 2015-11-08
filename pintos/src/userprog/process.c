@@ -15,6 +15,7 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -47,29 +48,26 @@ process_execute (const char *file_name)
   sema_init(&child->child_sema, 0);
   child->fn_copy = fn_copy;
 
-  // struct aux *aux;
-  // aux = malloc(sizeof(struct aux));
-  // aux->fn_copy = fn_copy;
-  // aux->child = child;
-
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, child);
   if (tid == TID_ERROR)
     {
       palloc_free_page (fn_copy);
       free(child);
-      // free(aux);
     }
   else
     {
+      sema_down(&child->child_sema);
       child->pid = tid;
       child->alive = 2;
-      child->exit_status = 0;
-      sema_down(&child->child_sema);
-      list_push_back(&thread_current()->children, &child->child_elem);
+      if (!child->load_status)
+        {
+          free(child);
+          tid = -1;
+        }
+      else
+        list_push_back(&thread_current()->children, &child->child_elem);
     }
-  // if (fn_copy)
-  // palloc_free_page (fn_copy);
   return tid;
 }
 
@@ -122,19 +120,15 @@ process_wait (tid_t child_tid UNUSED)
     {
       struct thread *current = thread_current();
       struct list_elem *el;
-      int i;
-      i = 0;
       for (el = list_begin(&(current->children));
            el != list_end(&(current->children)); el = list_next(el))
         {
           struct child_thread *child = list_entry(el, struct child_thread,
                                                   child_elem);
-          i++;
           if (child->pid == child_tid)
             {
               sema_down(&child->child_sema);
               int status = child->exit_status;
-              // printf("in process_wait - i: %d, status: %d\n", i, status);
               list_remove(el);
               free(child);
               return status;
@@ -432,7 +426,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   success = true;
 
   done:
-
+  t->child->load_status = success;
   return success;
 }
 
