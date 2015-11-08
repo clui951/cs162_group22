@@ -95,7 +95,7 @@ struct thread
     struct file *file_des[128];          /* File descriptors. */
     struct file *executable;             /* The current executable. */
     struct list children;                /* List of thread's children. */
-    struct aux *aux;                     /* Auxiliary information. */
+    struct child_thread *child;          /* Auxiliary information. */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -117,6 +117,7 @@ struct child_thread
   int exit_status;                      /* Exit status of the child thread. */
   struct list_elem child_elem;          /* List element. */
   struct semaphore child_sema;          /* Semaphore for parent-child pair. */
+  char *fn_copy;                        /* Filename copy. */
 };
 
 /* Struct for auxiliary information. */

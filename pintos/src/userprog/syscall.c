@@ -138,8 +138,13 @@ exit (int status)
 		status = -1;
 	struct thread *current = thread_current();
 	lock_acquire(&file_lock);
-	if (current->aux->child)
-		current->aux->child->exit_status = status;
+	// printf("outside if statement, %d ;", status);
+	if (current->child)
+		{
+			// printf("in if statement, %d", status);
+			current->child->exit_status = status;
+		}
+	// printf("\n");
 	lock_release(&file_lock);
 	printf("%s: exit(%d)\n", current->name, status);
 	thread_exit();
@@ -168,8 +173,10 @@ exec (const char *file)
 		}
 	palloc_free_page (fn_copy);
 	file_close(open_file);
+	int pid = process_execute(file);
 	lock_release(&file_lock);
-	return process_execute(file);
+	// printf("in exec - file: %s, pid %d\n", file, pid);
+	return pid;
 }
 
 int

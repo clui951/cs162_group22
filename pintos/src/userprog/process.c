@@ -43,29 +43,33 @@ process_execute (const char *file_name)
   file_name = strtok_r((char *)file_name, " ", &state);
 
   struct child_thread *child;
-  child = calloc(sizeof(struct child_thread), 1);
+  child = malloc(sizeof(struct child_thread));
   sema_init(&child->child_sema, 0);
+  child->fn_copy = fn_copy;
 
-  struct aux *aux;
-  aux = calloc(sizeof(struct aux), 1);
-  aux->fn_copy = fn_copy;
-  aux->child = child;
+  // struct aux *aux;
+  // aux = malloc(sizeof(struct aux));
+  // aux->fn_copy = fn_copy;
+  // aux->child = child;
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, aux);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, child);
   if (tid == TID_ERROR)
     {
       palloc_free_page (fn_copy);
       free(child);
-      free(aux);
+      // free(aux);
     }
   else
     {
       child->pid = tid;
       child->alive = 2;
+      child->exit_status = 0;
       sema_down(&child->child_sema);
       list_push_back(&thread_current()->children, &child->child_elem);
     }
+  // if (fn_copy)
+  // palloc_free_page (fn_copy);
   return tid;
 }
 
@@ -74,8 +78,8 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  struct aux *aux = file_name_;
-  char *file_name = aux->fn_copy;
+  struct child_thread *child = file_name_;
+  char *file_name = child->fn_copy;
   struct intr_frame if_;
   bool success;
 
@@ -85,7 +89,7 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
-  sema_up(&aux->child->child_sema);
+  sema_up(&child->child_sema);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -118,20 +122,25 @@ process_wait (tid_t child_tid UNUSED)
     {
       struct thread *current = thread_current();
       struct list_elem *el;
+      int i;
+      i = 0;
       for (el = list_begin(&(current->children));
            el != list_end(&(current->children)); el = list_next(el))
         {
           struct child_thread *child = list_entry(el, struct child_thread,
                                                   child_elem);
+          i++;
           if (child->pid == child_tid)
             {
               sema_down(&child->child_sema);
               int status = child->exit_status;
+              // printf("in process_wait - i: %d, status: %d\n", i, status);
               list_remove(el);
               free(child);
               return status;
             }
         }
+      return -1;
     }
   return -1;
 }
@@ -160,23 +169,22 @@ process_exit (void)
       pagedir_destroy (pd);
     }
 
+  cur->child->alive--;
   struct list_elem *el;
   for (el = list_begin(&(cur->children)); el != list_end(&(cur->children));
        el = list_next(el))
     {
       struct child_thread *child = list_entry(el, struct child_thread,
                                               child_elem);
-      if (child->alive == 0)
-        {
-          list_remove(el);
-          free(child);
-        }
-      else
-        child->alive--;
+      list_remove(el);
+      free(child);
     }
   if (cur->executable != NULL)
     file_close(cur->executable);
-  sema_up(&(cur->aux->child->child_sema));
+  int i;
+  for (i = 0; i < 128; i++)
+    file_close(cur->file_des[i]);
+  sema_up(&(cur->child->child_sema));
 }
 
 /* Sets up the CPU for running user code in the current
