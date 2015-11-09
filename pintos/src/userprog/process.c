@@ -59,7 +59,6 @@ process_execute (const char *file_name)
     {
       sema_down(&child->child_sema);
       child->pid = tid;
-      child->alive = 2;
       if (!child->load_status)
         {
           free(child);
@@ -163,7 +162,6 @@ process_exit (void)
       pagedir_destroy (pd);
     }
 
-  cur->child->alive--;
   struct list_elem *el;
   for (el = list_begin(&(cur->children)); el != list_end(&(cur->children));
        el = list_next(el))

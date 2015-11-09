@@ -113,19 +113,11 @@ struct thread
 struct child_thread
 {
   int pid;                              /* PID for child thread. */
-  int alive;                            /* Count for parent and child being alive. */
   int exit_status;                      /* Exit status of the child thread. */
   int load_status;                      /* Load status of the child's executable. */
   struct list_elem child_elem;          /* List element. */
   struct semaphore child_sema;          /* Semaphore for parent-child pair. */
   char *fn_copy;                        /* Filename copy. */
-};
-
-/* Struct for auxiliary information. */
-struct aux
-{
-  char *fn_copy;                        /* Filename copy. */
-  struct child_thread *child;           /* Pointer to child thread. */
 };
 
 /* If false (default), use round-robin scheduler.
