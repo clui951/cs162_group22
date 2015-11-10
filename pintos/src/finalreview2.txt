@@ -1,0 +1,79 @@
+Project 2 Final Report
+
+The changes you made since your initial design doc and why you made them (feel free to re-iterate what you discussed with your TA in the design review)
+
+- We didn’t end up using a has_waited boolean in the child_thread struct because
+we are immediately removing the child thread struct once it’s been waited on.
+There is never a situation where this boolean is true and the thread hasn’t
+been removed or freed
+- We didn’t end up using the alive int in the child_thread struct because we
+freed and removed all the child threads once a process exits
+- Instead of the child_wait and child_exec semaphores, we just used one
+semaphore called child_sema for both wait and exec
+- Instead of having the lock file_wait in the child_thread struct, we instead
+put one file_lock lock in syscall.c, since all file operations are handled there
+- We kept a pointer to a char array for the command that the thread was running
+so that we could reference it again if necessary and pass it to different methods
+- We also kept a struct named executable in the thread struct to keep track of
+the current executable
+- We kept a child_thread struct named child in the thread struct that keeps
+track of the current thread’s child_thread information if it is a child so that
+we can keep track of the child thread’s semaphore and use it
+
+A reflection on the project:
+What exactly did each member do?
+Mei and Calvin initially started the project working on argument passing and a
+little bit of syscalls because early in the week because Michael and Brian had
+CS170 midterms to study for. After the 170 midterm we all got together and got
+everyone up to date and on the same page on where we were in terms of current
+status. We then started going through syscalls by splitting them up amongst the
+four of us, and occasionally working together. Once the infrastructure of the
+syscall.c file was setup, everything went pretty smoothly. Michael and Brian
+worked a lot on exec while Mei and Calvin worked on wait. We made some progress
+there, but we soon realized that the two functions depended heavily upon each
+other and had very dependent logic. As a result, we just started coding as a
+group of 4. Towards the end, we were only failing the multi-oom test, which
+required an extensive amount of debugging. In order to try and fix it, we all
+met up as a group multiple times and stared at the screen, peering through our
+logic.
+
+What went well?
+I think we’re really good at helping each other when the other group members are
+busy. Our group really complements each other in that we care about each other
+outside of the class so we try to help as much as we can. Even if certain group
+members are busy with other classes, others will take the initiative to start
+and back them up. As a whole, we communicated much better this time with regards
+to assigning work on the project and completing it. We were very able to delegate
+subtasks or problems to be tackled, and then be able to come back together to
+explain our individual implementations. This time around, we were also much more
+understanding of each group member’s strengths and were able to take advantage
+of it. For example, Calvin was pretty good at understanding and debugging pointers,
+so whenever we had a pointer question, Calvin would come to the rescue. Instead
+of working remotely, we prioritized working together as a 4-person group, since
+we keep each other accountable and work much more efficiently when we can pair
+program. Another important key to our success was having a delegated meeting place.
+We utilized access to one of the rooms in Soda that had a TV, which was incredibly
+helpful, since it allowed us to sit around and look at the same issue so we can
+debug effectively amongst the four of us.
+
+What can we improve?
+We definitely need to start earlier. The time crunch was pretty bad since we
+basically started working as a group on Thursday night, instead of separately.
+A lot of us have very conflicting schedules in terms of extra curriculars and
+academic deadlines, so we are still trying to figure out how to meet up earlier.
+We end up working a lot on the last few days, as the pressure of the deadline
+really ramps up, so something we could work on is starting earlier in the week,
+or when the project is assigned, so we don’t end up rushing all nighters and
+panicking. As a result of our difficult schedules and procrastination, we ended
+up using 2 slip days to get one point even though we had 228/229 by Friday night.
+The debugging took multiple hours across both days, and turned out to be a very
+minor, yet crucial error. We realized that we weren’t totally following our
+design doc and therefore missed one significant part that let us pass every test
+but the multi-oom test because we weren’t detailed in our logic. Thankfully after
+finding that bug, everything immediately passed. In the future, it would be a lot
+better if we had strategic group debug sessions where we go over the code line by
+line in pairs, similar to pair programming ideology. When we tried to debug as a
+group of 4, it was easy to zone out, and some people would rush ahead of others,
+while leaving some behind to slowly peer over the logic. We could also follow our
+design doc better because we would’ve written the design doc in a much calmer
+state of mind rather than the panic of the last day.
