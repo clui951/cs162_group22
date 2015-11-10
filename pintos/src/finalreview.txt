@@ -1,5 +1,7 @@
 Project 2 Final Report
 
+The changes you made since your initial design doc and why you made them (feel
+free to re-iterate what you discussed with your TA in the design review)
 - We didn’t end up using a has_waited boolean in the child_thread struct because
 we are immediately removing the child thread struct once it’s been waited on.
 There is never a situation where this boolean is true and the thread hasn’t
