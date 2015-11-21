@@ -1,0 +1,188 @@
+CS 162
+Project 3: File Systems
+Design Document
+
+
+Fill in the following information:
+
+
+GSI:
+Group Number:
+Mei Wan <wanyuenmei@gmail.com>
+Calvin Lui <clui951@berkeley.edu>
+Brian Chen <chen.brian@berkeley.edu>
+FirstName LastName <email@domain.example>
+
+
+Preliminary Questions
+=====================
+
+1) If you have any preliminary comments on your submission or notes for
+   the TAs please give them here.
+
+2) Please cite any offline or online sources you consulted while preparing your
+   submission, other than the Pintos documentation, course text, lecture notes,
+   and course staff.
+
+Buffer Cache
+============
+
+3) Copy here the declaration of each new or changed 'struct' or 'struct'
+   member, global or static variable, 'typedef', or enumeration. Identify the
+   purpose of each in 25 words or less.
+
+In cache.h:
+
+struct lock cache_lock; 		/* Lock for cache operations. */
+
+struct cache_entry {
+	int threads_reading;		/* Number of threads reading from this cache entry. */
+	bool dirty; 			/* True if cache has been written to. */
+	bool occupied;			/* True if being operated on */
+	int pin;				/* pin value for clock replacement */
+}
+
+4) Describe how your cache replacement algorithm chooses a cache block to
+   evict.
+
+We are using a clock replacement policy in order to choose cache blocks to evict. Cache entries will therefore have a pin bit that we flip each time we encounter it to indicate whether to replace or decrement. We will also include an occupied bit that will indicate if a process is currently reading or writing to that entry. If the occupied bit is 1, that means we should skip over it, else if it is 0, we will consider it for eviction. We also include a dirty bit so we know whether or not we need to write back to disk when we are evicting.
+
+5) An optional part of this project is making your buffer cache periodically
+   flush dirty blocks to disk. Describe a possible implementation strategy for
+   this feature.
+
+We will be using our non-busy waiting timer_sleep() to write all of the dirty blocks in the cache to disk after set intervals of time.
+
+6) An optional part of this project is implementing read-ahead caching for
+   files in your buffer cache. Describe a possible implementation strategy for
+   this feature.
+
+When we retrieve a block from the cache, we create a new thread that gets the next data block sector number from the inode. The thread would then put the data block into the cache. To avoid race conditions, we can use a lock.
+
+7) When one process is actively reading or writing data in a buffer cache
+   block, how are other processes prevented from evicting that block?
+
+The cache entry’s threads_reading variable holds a counter for the number of threads that are using the cache entry. As long as it is more than 0, it will not be evicted.
+
+8) During the eviction of a block from the cache, how are other processes
+   prevented from attempting to access the block?
+
+A process has to obtain the cache lock to access the block. This prevents multiple processes attempting to access and evict the cache at the same time. If the threads_reading count is 0, it is being evicted, meaning that no other process is accessing it. 
+
+Indexed and Extensible Files
+============================
+
+9) Copy here the declaration of each new or changed 'struct' or 'struct' member,
+   global or static variable, 'typedef', or enumeration. Identify the purpose
+   of each in 25 words or less.
+
+
+struct inode_disk {
+	block_sector_t sectors[125];  /* 123 direct, 1 indirect, 1 doubly indirect */
+	boolean directory; 		/* true if directory */
+	int length; 			/* length of file/directory */
+	unsigned magic; 		/* from discussion; magic number??? */
+	struct lock inode_lock; 	/* lock in order to operate on inode */
+	
+}
+
+10) What is the maximum size of a file supported by your inode structure? Show
+    your work.
+(512 byte block) * [(123 direct) + (128 single indirect) + (128 * 128 double indirect)] = 8,517,120B
+~ 8.516 MB
+
+11) Explain how your code avoids a race if two processes attempt to extend a file
+    at the same time.
+Each inode_disk struct contains a lock in the struct. In order to operate/extend the file, the lock must be held by the process acting upon it. When the lock is acquired, the process will have the true length to determine how much extension is necessary.
+
+
+12) Suppose processes A and B both have file F open, both positioned at
+    end-of-file. If A reads and B writes F at the same time, A may read all,
+    part, or none of what B writes. However, A may not read data other than what
+    B writes, e.g. if B writes nonzero data, A is not allowed to see all zeros.
+    Explain how your code avoids this race.
+
+The length attribute is only updated once data is written past the old length. When B writes the content, it will update the length attribute only after it has finished writing. Thus, A will either 1) read to the old EOF based on the old length because B is still writing, or 2) A will read to the new EOF, which is the data B writes, if B is done writing and updates the length field.
+
+13) Is your synchronization design "fair"? If so, explain how your
+    synchronization design provides fairness. If not, explain how you could add
+    fairness to your design. File access is "fair" if readers cannot indefinitely
+    block writers or vice versa. That is, many processes reading from a file
+    cannot prevent forever another process from writing the file, and many
+    processes writing to a file cannot prevent another process forever from
+    reading the file.
+Our synchronization design is mostly fair. Writers will never be blocked by readers trying to read the data. Readers technically should not be blocked by writers either. The only case in which there could be some discrepancy is if the reader is trying to read past the end of the old file length, and a long writer is extending and writing the file. The reader will never be able to read the newly written data until the writer completely finishes and updates the length attribute. If two writers try to write at the same time, they will happen serially because acquiring locks is required in order to operate on the file.
+
+14) Is your inode structure a multilevel index? If so, why did you choose this
+    particular combination of direct, indirect, and doubly indirect blocks? If
+    not, why did you choose an alternative inode structure, and what advantages
+    and disadvantages does your structure have, compared to a multilevel index?
+
+Our inode structure is a multilevel index. For our implementation, we use 123 direct blocks, 1 single indirect block, and 1 double indirect block. We use a many direct blocks because a majority of files are small and can be properly represented with 1 direct block. With this logic, we also include 1 single and 1 double indirect block to account for medium and large size files. 
+
+Subdirectories
+==============
+
+15) Copy here the declaration of each new or changed 'struct' or 'struct' member,
+    global or static variable, 'typedef', or enumeration. Identify the purpose
+    of each in 25 words or less.
+
+In thread.h:
+
+struct thread {
+	/* … */
+	struct dir *cwd; 		/* Current working directory of the thread. */
+}
+
+In inode.c:
+
+struct lock inode_lock;		/* Lock for the inode. */
+
+struct inode_disk {
+	/* … */
+	bool is_dir; 			/* Boolean for whether the inode is a directory or not. */
+}
+
+struct inode {
+	/* … */
+	bool is_dir; 			/* Boolean for whether the inode is a directory or not. */
+}
+
+16) Describe your code for traversing a user-specified path. How do traversals
+    of absolute and relative paths differ?
+
+We’re going to tokenize the user-specified path by ‘/’. If the first character is a ‘/’, it means we’re traversing an absolute path and we’re going to go to the root directory. If not, it means we’re traversing a relative path and we’re going to start in the current working directory. Then, we’re going to iterate over and use dir_lookup to look up and walk through the tokens in order. 
+
+17) How do you prevent races on directory entries? For example, only one of two
+    simultaneous attempts to remove a single file should succeed, as should only
+    one of two simultaneous attempts to create a file with the same name, and so
+    on.
+
+
+We will use a lock for each directory’s inode. Operations such as creating and removing a file will require this lock to be acquired, which prevents simultaneous operations on the same file.
+
+18) Does your implementation allow a directory to be removed if it is open by a
+    process or if it is in use as a process's current working directory? If so,
+    what happens to that process's future file system operations? If not, how do
+    you prevent it?
+
+No, we will disallow the removal of a directory if a process is currently accessing it. For each inode, we will keep track of the number of processes currently accessing the current directory. Let’s call this variable open. If open is more than 1, it means that there are other processes accessing the current directory in addition to the current delete directory process. In this case, we will abort delete directory process.
+
+19) Explain why you chose to represent the current directory of a process the
+    way you did.
+
+We just keep track of the current working directory of every thread at any given time using a pointer. This pointer will be changed every time dir_lookup is called when we traverse user-specified paths. 
+
+Student Testing
+===============
+
+20) Describe your testing plan for your buffer cache. For each of your two test
+    cases, describe how your test works, describe the expected output, and if
+    you need any new syscalls to support your test, describe them.
+
+We will test the effectiveness of our cache by measuring its hit rate. We will first open a file and read it sequentially with a completely reset cache, capturing its hit rate. Then, we will close that file, reopen it, read it again with the now populated cache, and confirm that the new hit rate is greater than the first one.
+
+We will also test the buffer cache’s ability to coalesce writes to the same sector. We will open a file and write 64KB one byte at a time. Then, we will read the file one byte at a time. We will check to see if the number of writes is on the order of 128.
+
+
+
