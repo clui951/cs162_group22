@@ -11,7 +11,7 @@ Group Number:
 Mei Wan <wanyuenmei@gmail.com>
 Calvin Lui <clui951@berkeley.edu>
 Brian Chen <chen.brian@berkeley.edu>
-FirstName LastName <email@domain.example>
+Michael Deng <michaeldeng18@gmail.com>
 
 
 Preliminary Questions
