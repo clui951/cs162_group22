@@ -33,13 +33,17 @@ Buffer Cache
 
 In cache.h:
 
-struct lock cache_lock; 		/* Lock for cache operations. */
+struct lock global_cache_lock; 		/* Global lock for cache operations. */
 
 struct cache_entry {
 	int threads_reading;		/* Number of threads reading from this cache entry. */
 	bool dirty; 			/* True if cache has been written to. */
-	bool occupied;			/* True if being operated on */
-	int pin;				/* pin value for clock replacement */
+	int pin;			/* Pin value for clock replacement. */
+	int sector_num;			/* The number of the cache entry’s sector. */
+
+	struct cache_data data;		/* Struct to hold the data of the cache entry */
+
+	struct lock cache_lock;		/* Lock specific to each cache for synchronization. */
 }
 
 4) Describe how your cache replacement algorithm chooses a cache block to
@@ -51,13 +55,13 @@ We are using a clock replacement policy in order to choose cache blocks to evict
    flush dirty blocks to disk. Describe a possible implementation strategy for
    this feature.
 
-We will be using our non-busy waiting timer_sleep() to write all of the dirty blocks in the cache to disk after set intervals of time.
+We will be using our non-busy waiting timer_sleep() to write all of the dirty blocks in the cache to disk after set intervals of time. We will use a lock with a condition variable to ensure that we only flush when there are dirty blocks.
 
 6) An optional part of this project is implementing read-ahead caching for
    files in your buffer cache. Describe a possible implementation strategy for
    this feature.
 
-When we retrieve a block from the cache, we create a new thread that gets the next data block sector number from the inode. The thread would then put the data block into the cache. To avoid race conditions, we can use a lock.
+When we retrieve a block from the cache, we create a new thread that gets the next data block sector number from the inode. The thread would then put the data block into the cache. To avoid race conditions, we will use a lock.
 
 7) When one process is actively reading or writing data in a buffer cache
    block, how are other processes prevented from evicting that block?
@@ -76,14 +80,16 @@ Indexed and Extensible Files
    global or static variable, 'typedef', or enumeration. Identify the purpose
    of each in 25 words or less.
 
-
+struct inode {
+	/* … */
+	struct lock inode_lock; 	/* lock in order to operate on inode */
+}
+	
 struct inode_disk {
 	block_sector_t sectors[125];  /* 123 direct, 1 indirect, 1 doubly indirect */
 	boolean directory; 		/* true if directory */
 	int length; 			/* length of file/directory */
-	unsigned magic; 		/* from discussion; magic number??? */
-	struct lock inode_lock; 	/* lock in order to operate on inode */
-	
+	unsigned magic; 		/* from discussion; magic number??? */	
 }
 
 10) What is the maximum size of a file supported by your inode structure? Show
@@ -93,8 +99,8 @@ struct inode_disk {
 
 11) Explain how your code avoids a race if two processes attempt to extend a file
     at the same time.
-Each inode_disk struct contains a lock in the struct. In order to operate/extend the file, the lock must be held by the process acting upon it. When the lock is acquired, the process will have the true length to determine how much extension is necessary.
 
+Each inode_disk struct contains a lock in the struct. In order to operate/extend the file, the lock must be held by the process acting upon it. When the lock is acquired, the process will have the true length to determine how much extension is necessary.
 
 12) Suppose processes A and B both have file F open, both positioned at
     end-of-file. If A reads and B writes F at the same time, A may read all,
@@ -111,6 +117,7 @@ The length attribute is only updated once data is written past the old length. W
     cannot prevent forever another process from writing the file, and many
     processes writing to a file cannot prevent another process forever from
     reading the file.
+
 Our synchronization design is mostly fair. Writers will never be blocked by readers trying to read the data. Readers technically should not be blocked by writers either. The only case in which there could be some discrepancy is if the reader is trying to read past the end of the old file length, and a long writer is extending and writing the file. The reader will never be able to read the newly written data until the writer completely finishes and updates the length attribute. If two writers try to write at the same time, they will happen serially because acquiring locks is required in order to operate on the file.
 
 14) Is your inode structure a multilevel index? If so, why did you choose this
@@ -158,7 +165,6 @@ We’re going to tokenize the user-specified path by ‘/’. If the first chara
     one of two simultaneous attempts to create a file with the same name, and so
     on.
 
-
 We will use a lock for each directory’s inode. Operations such as creating and removing a file will require this lock to be acquired, which prevents simultaneous operations on the same file.
 
 18) Does your implementation allow a directory to be removed if it is open by a
@@ -180,9 +186,8 @@ Student Testing
     cases, describe how your test works, describe the expected output, and if
     you need any new syscalls to support your test, describe them.
 
-We will test the effectiveness of our cache by measuring its hit rate. We will first open a file and read it sequentially with a completely reset cache, capturing its hit rate. Then, we will close that file, reopen it, read it again with the now populated cache, and confirm that the new hit rate is greater than the first one.
+We will test the effectiveness of our cache by measuring its hit rate. We will first open a file and read it sequentially with a completely reset cache, capturing its hit rate. Then, we will close that file, reopen it, read it again with the now populated cache, and confirm that the new hit rate is greater than the first one. We will implement a syscall to surface the read count and write count to effectively measure hit rate.
 
-We will also test the buffer cache’s ability to coalesce writes to the same sector. We will open a file and write 64KB one byte at a time. Then, we will read the file one byte at a time. We will check to see if the number of writes is on the order of 128.
-
+We will also test the buffer cache’s ability to coalesce writes to the same sector. We will open a file and write 64KB one byte at a time. Then, we will read the file one byte at a time. We will check to see if the number of writes is on the order of 128. We will implement a syscall to surface the write count.
 
 
