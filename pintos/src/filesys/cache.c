@@ -99,9 +99,9 @@ void cache_clock_evict_and_replace (block_sector_t new_sector) {
 
 struct list_elem * wrapping_list_next(struct list_elem *elem) {
 	elem = list_next(elem);
-	if (is_tail(elem)) {
+	if (elem == list_tail(&cache)) {
 		elem = list_begin(&cache);
-	} 
+	}
 	return elem;
 }
 
