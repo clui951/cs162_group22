@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <string.h>
 #include "filesys/cache.h"
 #include "threads/malloc.h"
 #include "filesys/filesys.h"
@@ -8,7 +10,7 @@ void cache_init(void) // initializes buffer cache
 	lock_init(&global_cache_lock);
 }
 
-struct cache_entry * cache_read_sector (block_sector_t sector)
+uint8_t * cache_read_sector (block_sector_t sector)
 {
 	struct cache_entry *entry;
 	struct list_elem *elem = list_begin(&cache);
@@ -18,7 +20,7 @@ struct cache_entry * cache_read_sector (block_sector_t sector)
 		entry = list_entry(elem, struct cache_entry, cache_list_elem);
 		if (entry->block_sector == sector) {
 			entry->pin = 1;
-			return entry;
+			return entry->data;
 		}
 		elem = list_next(elem);
 	}
@@ -26,46 +28,35 @@ struct cache_entry * cache_read_sector (block_sector_t sector)
 
 	lock_acquire(&global_cache_lock);
 	/* Cache miss */
-	struct cache_entry *new_entry = malloc(sizeof(struct cache_entry));
-	block_read(fs_device, sector, new_entry->data);
+
 	
 	/* if cache size < max possible:
 		init new cache_entry and append to list
 		copy from disk to new entry
 		cache_size++ */
+	struct cache_entry *return_entry = NULL;
 	if (cache_size < 64) {
+		struct cache_entry *new_entry = malloc(sizeof(struct cache_entry));
+		block_read(fs_device, sector, new_entry->data);
 		new_entry->block_sector = sector;
 		new_entry->pin = 1;
 		new_entry->dirty = false;
 		new_entry->threads_reading = 0;
 		lock_init(&(new_entry->cache_entry_lock));
 		list_push_back(&cache, &(new_entry->cache_list_elem));
+		return_entry = new_entry;
 		cache_size++;
 		if (clock_hand_elem == NULL) { 		// only happens on the first time;
 			clock_hand_elem = list_end(&cache);
 		}
 	} else {
-
-	/* 
-	else:
-		evict() with clock
-		copy from disk to evicted entry space
-	*/
-
+		return_entry = cache_clock_evict_and_replace(sector);
 	}
-
-	/*
-	return the sector read
-	*/
-
-
-
-	free(new_entry);
 	lock_release(&global_cache_lock);
-	return NULL;
+	return return_entry->data;
 }
 
-void cache_clock_evict_and_replace (block_sector_t new_sector) {
+struct cache_entry * cache_clock_evict_and_replace (block_sector_t new_sector) {
 
 	struct cache_entry *temp_cache_entry; 
 	while (true) {
@@ -94,6 +85,7 @@ void cache_clock_evict_and_replace (block_sector_t new_sector) {
 			lock_release(&(temp_cache_entry->cache_entry_lock));
 		}
 	}
+	return temp_cache_entry;
 }
 
 
@@ -120,10 +112,46 @@ void cache_read_sector_to_clock_sector(block_sector_t new_sector) {
 	temp_cache_entry->block_sector = new_sector;
 }
 
-// void cache_write (block_sector_t sector, int size, int offset, void* buffer) // buffer cache is always writeback, don't need separate method for writeback
-// {
+void cache_write_sector (block_sector_t sector, void* buffer) { // buffer cache is always writeback, don't need separate method for writeback
+	struct cache_entry *entry;
+	struct list_elem *elem = list_begin(&cache);
 
-// }
+	/* This loop checks for cache hit */
+	while (elem != list_end(&cache)) {
+		entry = list_entry(elem, struct cache_entry, cache_list_elem);
+		if (entry->block_sector == sector) {
+			memcpy(entry->data, buffer, BLOCK_SECTOR_SIZE);
+			entry->pin = 1;
+			return;
+		}
+		elem = list_next(elem);
+	}
+
+	lock_acquire(&global_cache_lock);
+
+	if (cache_size < 64) {
+		struct cache_entry *new_entry = malloc(sizeof(struct cache_entry));
+		// block_read(fs_device, sector, new_entry->data);
+		new_entry->block_sector = sector;
+		new_entry->pin = 1;
+		new_entry->dirty = true;
+		new_entry->threads_reading = 0;
+		lock_init(&(new_entry->cache_entry_lock));
+		list_push_back(&cache, &(new_entry->cache_list_elem));
+		cache_size++;
+		// write data to entry now
+		if (clock_hand_elem == NULL) { 		// only happens on the first time;
+			clock_hand_elem = list_end(&cache);
+		}
+	} else {
+		// evict entry (flush, clock alg)
+		// write data to entry just flushed and update sector # 
+		// advance clock
+	}
+
+	lock_release(&global_cache_lock);
+
+}
 
 // void cache_allocate (block_sector_t sector) // not sure if we need this. use case: initialize an entry in the cache table
 // {

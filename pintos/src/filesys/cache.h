@@ -19,8 +19,8 @@ struct cache_entry {
 };
 
 void cache_init(void); // initializes buffer cache
-struct cache_entry * cache_read_sector (block_sector_t sector);
-// void cache_write (block_sector_t sector, int size, int offset, void* buffer); // buffer cache is always writeback, don't need separate method for writeback
+uint8_t * cache_read_sector (block_sector_t sector);
+void cache_write_sector (block_sector_t sector, void* buffer); // buffer cache is always writeback, don't need separate method for writeback
 // void cache_allocate (block_sector_t sector); // not sure if we need this. use case: initialize an entry in the cache table
 // void cache_add (block_sector_t sector); // adding in a new sector, will use evict to evict a sector if necessary
 // void cache_evict (); // second chance algorithm! evicts a block.
@@ -29,7 +29,7 @@ struct cache_entry * cache_read_sector (block_sector_t sector);
 // void cache_load_entry (block_sector_t sector, struct cache_entry* entry); // used in second chance algorithm. loads an entry from disk
 // void cache_find (block_sector_t sector);
 // void cache_readahead (block_sector_t sector);
-void cache_clock_evict_and_replace (block_sector_t new_sector);
+struct cache_entry * cache_clock_evict_and_replace (block_sector_t new_sector);
 struct list_elem * wrapping_list_next(struct list_elem *elem);
 void cache_flush_clock_entry(void);
 void cache_read_sector_to_clock_sector(block_sector_t new_sector);
