@@ -98,7 +98,7 @@ inode_create (block_sector_t sector, off_t length)
               for (i = 0; i < sectors; i++) 
                 block_write (fs_device, disk_inode->start + i, zeros);
             }
-          success = true; 
+          success = true;
         } 
       free (disk_inode);
     }
