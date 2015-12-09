@@ -26,9 +26,7 @@ struct cache_entry * cache_get_entry (block_sector_t sector)
 			if (entry->pin == 0) {
 				entry->pin = 1;
 			}
-			// printf("%d what1\n", thread_current()->tid);
 			lock_release(&global_cache_lock);
-			// printf("%d yeah1\n", thread_current()->tid);
 			return entry;
 		}
 		elem = list_next(elem);
@@ -53,14 +51,12 @@ struct cache_entry * cache_get_entry (block_sector_t sector)
 		return_entry = new_entry;
 		cache_size++;
 		if (clock_hand_elem == NULL) { 		// only happens on the first time;
-			clock_hand_elem = list_end(&cache);
+			clock_hand_elem = list_back(&cache);
 		}
 	} else {
 		return_entry = cache_clock_evict_and_replace(sector);
 	}
-	printf("%d what2\n", thread_current()->tid);
 	lock_release(&global_cache_lock);
-	printf("%d yeah2\n", thread_current()->tid);
 	return return_entry;
 }
 
@@ -80,16 +76,17 @@ struct cache_entry * cache_clock_evict_and_replace (block_sector_t new_sector) {
 		if (temp_cache_entry->pin == 0) {
 			// writeback if dirty
 			if (temp_cache_entry->dirty == true) {
-				cache_flush_clock_entry();
+				cache_flush_clock_entry ();
 			}
 			// read new sector from disk
-			cache_read_sector_to_clock_sector(new_sector);
+			cache_read_sector_to_clock_sector (new_sector);
 			break;
 		} else {
 			temp_cache_entry->pin = 0;
 		}
-		clock_hand_elem = wrapping_list_next(clock_hand_elem);
+		increment_clock ();
 	}
+	increment_clock ();
 	return temp_cache_entry;
 }
 
@@ -99,11 +96,19 @@ advances through cache and wraps around from end to beginning of list
 */
 struct list_elem * wrapping_list_next (struct list_elem *elem) {
 	if (elem == list_end(&cache)) {
-		elem = list_begin(&cache);
-	} else {
-		elem = list_next(elem);
+		struct list_elem *start = list_begin(&cache);
+		return start;
 	}
+	elem = list_next(elem);
 	return elem;
+}
+
+void increment_clock (void) {
+	if (clock_hand_elem == list_back(&cache)) {
+		clock_hand_elem = list_begin(&cache);
+	} else {
+		clock_hand_elem = list_next(clock_hand_elem);
+	}
 }
 
 

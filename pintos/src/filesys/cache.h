@@ -33,5 +33,6 @@ struct cache_entry * cache_clock_evict_and_replace (block_sector_t new_sector);
 struct list_elem * wrapping_list_next(struct list_elem *elem);
 void cache_flush_clock_entry(void);
 void cache_read_sector_to_clock_sector(block_sector_t new_sector);
+void increment_clock(void);
 
 // #endif /* filesys/cache.h */
