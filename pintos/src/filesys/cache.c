@@ -4,13 +4,14 @@
 #include "threads/malloc.h"
 #include "filesys/filesys.h"
 
-void cache_init(void) // initializes buffer cache
+void cache_init (void) // initializes buffer cache
 {
 	list_init(&cache);
 	lock_init(&global_cache_lock);
+	cache_size = 0;
 }
 
-uint8_t * cache_read_sector (block_sector_t sector)
+struct cache_entry * cache_get_entry (block_sector_t sector)
 {
 	struct cache_entry *entry;
 	struct list_elem *elem = list_begin(&cache);
@@ -22,7 +23,7 @@ uint8_t * cache_read_sector (block_sector_t sector)
 			if (entry->pin == 0) {
 				entry->pin = 1;
 			}
-			return entry->data;
+			return entry;
 		}
 		elem = list_next(elem);
 	}
@@ -55,7 +56,7 @@ uint8_t * cache_read_sector (block_sector_t sector)
 		return_entry = cache_clock_evict_and_replace(sector);
 	}
 	lock_release(&global_cache_lock);
-	return return_entry->data;
+	return return_entry;
 }
 
 
@@ -91,7 +92,7 @@ struct cache_entry * cache_clock_evict_and_replace (block_sector_t new_sector) {
 /* 
 advances through cache and wraps around from end to beginning of list
 */
-struct list_elem * wrapping_list_next(struct list_elem *elem) {
+struct list_elem * wrapping_list_next (struct list_elem *elem) {
 	elem = list_next(elem);
 	if (elem == list_tail(&cache)) {
 		elem = list_begin(&cache);
@@ -103,9 +104,27 @@ struct list_elem * wrapping_list_next(struct list_elem *elem) {
 /* 
 writes cache_entry indicated by clock_hand_elem to disk
 */
-void cache_flush_clock_entry(void) {
+void cache_flush_clock_entry (void) {
 	struct cache_entry *temp_cache_entry = list_entry(clock_hand_elem, struct cache_entry, cache_list_elem);
 	block_write(fs_device, temp_cache_entry->block_sector, temp_cache_entry->data);
+}
+
+/*
+flush all entries in the cache
+*/
+void cache_flush_all (void) {
+	struct cache_entry *entry;
+	struct list_elem *elem = list_begin(&cache);
+
+	/* This loop checks for cache hit */
+	while (elem != list_end(&cache)) {
+		entry = list_entry(elem, struct cache_entry, cache_list_elem);
+		if (entry->dirty == true) {
+			block_write(fs_device, entry->block_sector, entry->data);
+		}
+		free(entry);
+		elem = list_next(elem);
+	}
 }
 
 
