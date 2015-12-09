@@ -3,7 +3,6 @@
 #include "filesys/cache.h"
 #include "threads/malloc.h"
 #include "filesys/filesys.h"
-#include "threads/thread.h"
 
 void cache_init (void) // initializes buffer cache
 {
@@ -38,7 +37,7 @@ struct cache_entry * cache_get_entry (block_sector_t sector)
 		init new cache_entry and append to list
 		copy from disk to new entry
 		cache_size++ */
-	struct cache_entry *return_entry = NULL;
+	struct cache_entry *return_entry;
 	if (cache_size < 64) {
 		struct cache_entry *new_entry = malloc(sizeof(struct cache_entry));
 		block_read(fs_device, sector, &new_entry->data);
@@ -131,10 +130,13 @@ void cache_flush_all (void) {
 	while (elem != list_end(&cache)) {
 		entry = list_entry(elem, struct cache_entry, cache_list_elem);
 		if (entry->dirty == true) {
-			block_write(fs_device, entry->block_sector, &entry->data);
+			block_write(fs_device, entry->block_sector, entry->data);
 		}
-		free(entry);
 		elem = list_next(elem);
+	}
+	while (!list_empty(&cache)) {
+		struct list_elem *removed = list_pop_front(&cache);
+		free(list_entry(removed, struct cache_entry, cache_list_elem));
 	}
 }
 
