@@ -3,10 +3,10 @@
 #include "filesys/cache.h"
 #include "threads/malloc.h"
 #include "filesys/filesys.h"
+#include "threads/thread.h"
 
 void cache_init (void) // initializes buffer cache
 {
-	printf("what\n");
 	list_init(&cache);
 	lock_init(&global_cache_lock);
 	cache_size = 0;
@@ -14,6 +14,8 @@ void cache_init (void) // initializes buffer cache
 
 struct cache_entry * cache_get_entry (block_sector_t sector)
 {
+	lock_acquire(&global_cache_lock);
+
 	struct cache_entry *entry;
 	struct list_elem *elem = list_begin(&cache);
 
@@ -24,16 +26,16 @@ struct cache_entry * cache_get_entry (block_sector_t sector)
 			if (entry->pin == 0) {
 				entry->pin = 1;
 			}
+			// printf("%d what1\n", thread_current()->tid);
+			lock_release(&global_cache_lock);
+			// printf("%d yeah1\n", thread_current()->tid);
 			return entry;
 		}
 		elem = list_next(elem);
 	}
-
-	// lock_acquire(&global_cache_lock);
 	
 	/* Cache miss */
 
-	
 	/* if cache size < max possible:
 		init new cache_entry and append to list
 		copy from disk to new entry
@@ -46,7 +48,7 @@ struct cache_entry * cache_get_entry (block_sector_t sector)
 		new_entry->pin = 1;
 		new_entry->dirty = false;
 		new_entry->threads_reading = 0;
-		lock_init(&(new_entry->cache_entry_lock));
+		// lock_init(&(new_entry->cache_entry_lock));
 		list_push_back(&cache, &(new_entry->cache_list_elem));
 		return_entry = new_entry;
 		cache_size++;
@@ -56,7 +58,9 @@ struct cache_entry * cache_get_entry (block_sector_t sector)
 	} else {
 		return_entry = cache_clock_evict_and_replace(sector);
 	}
-	// lock_release(&global_cache_lock);
+	printf("%d what2\n", thread_current()->tid);
+	lock_release(&global_cache_lock);
+	printf("%d yeah2\n", thread_current()->tid);
 	return return_entry;
 }
 
@@ -142,51 +146,67 @@ void cache_read_sector_to_clock_sector(block_sector_t new_sector) {
 }
 
 
-void cache_write_sector (block_sector_t sector, void* buffer) { // buffer cache is always writeback, don't need separate method for writeback
+
+
+
+
+
+
+
+
+
+
+
+
+
+// /*
+// don't need write
+// */
+// void cache_write_sector (block_sector_t sector, void* buffer) { // buffer cache is always writeback, don't need separate method for writeback
 	
-	lock_acquire(&global_cache_lock);
+// 	lock_acquire(&global_cache_lock);
 
-	struct cache_entry *entry;
-	struct list_elem *elem = list_begin(&cache);
+// 	struct cache_entry *entry;
+// 	struct list_elem *elem = list_begin(&cache);
 
-	/* This loop checks for cache hit */
-	while (elem != list_end(&cache)) {
-		entry = list_entry(elem, struct cache_entry, cache_list_elem);
-		if (entry->block_sector == sector) {
-			memcpy(entry->data, buffer, BLOCK_SECTOR_SIZE);
-			entry->pin = 1;
-			return;
-		}
-		elem = list_next(elem);
-	}
+// 	/* This loop checks for cache hit */
+// 	while (elem != list_end(&cache)) {
+// 		entry = list_entry(elem, struct cache_entry, cache_list_elem);
+// 		if (entry->block_sector == sector) {
+// 			memcpy(entry->data, buffer, BLOCK_SECTOR_SIZE);
+// 			entry->pin = 1;
+// 			return;
+// 		}
+// 		elem = list_next(elem);
+// 	}
 
-	if (cache_size < 64) {
-		struct cache_entry *new_entry = malloc(sizeof(struct cache_entry));
-		// block_read(fs_device, sector, new_entry->data);
-		new_entry->block_sector = sector;
-		new_entry->pin = 1;
-		new_entry->dirty = true;
-		new_entry->threads_reading = 0;
-		memcpy(new_entry->data, buffer, BLOCK_SECTOR_SIZE);
-		lock_init(&(new_entry->cache_entry_lock));
-		list_push_back(&cache, &(new_entry->cache_list_elem));
-		cache_size++;
-		// write data to entry now
-		if (clock_hand_elem == NULL) { 		// only happens on the first time;
-			clock_hand_elem = list_end(&cache);
-		}
-	} else {
-		// evict entry (flush, clock alg)
-		struct cache_entry *write_entry = cache_clock_evict_and_replace(sector);
-		// write data to entry just flushed and update sector # 
-		memcpy(write_entry->data, buffer, BLOCK_SECTOR_SIZE);
-		write_entry->pin = 1;
+// 	if (cache_size < 64) {
+// 		struct cache_entry *new_entry = malloc(sizeof(struct cache_entry));
+// 		// block_read(fs_device, sector, new_entry->data);
+// 		new_entry->block_sector = sector;
+// 		new_entry->pin = 1;
+// 		new_entry->dirty = true;
+// 		new_entry->threads_reading = 0;
+// 		memcpy(new_entry->data, buffer, BLOCK_SECTOR_SIZE);
+// 		lock_init(&(new_entry->cache_entry_lock));
+// 		list_push_back(&cache, &(new_entry->cache_list_elem));
+// 		cache_size++;
+// 		// write data to entry now
+// 		if (clock_hand_elem == NULL) { 		// only happens on the first time;
+// 			clock_hand_elem = list_end(&cache);
+// 		}
+// 	} else {
+// 		// evict entry (flush, clock alg)
+// 		struct cache_entry *write_entry = cache_clock_evict_and_replace(sector);
+// 		// write data to entry just flushed and update sector # 
+// 		memcpy(write_entry->data, buffer, BLOCK_SECTOR_SIZE);
+// 		write_entry->pin = 1;
 
-	}
+// 	}
 
-	lock_release(&global_cache_lock);
+// 	lock_release(&global_cache_lock);
 
-}
+// }
 
 
 
