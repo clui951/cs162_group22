@@ -41,7 +41,7 @@ struct cache_entry * cache_get_entry (block_sector_t sector)
 	struct cache_entry *return_entry = NULL;
 	if (cache_size < 64) {
 		struct cache_entry *new_entry = malloc(sizeof(struct cache_entry));
-		block_read(fs_device, sector, new_entry->data);
+		block_read(fs_device, sector, &new_entry->data);
 		new_entry->block_sector = sector;
 		new_entry->pin = 1;
 		new_entry->dirty = false;
@@ -117,7 +117,7 @@ writes cache_entry indicated by clock_hand_elem to disk
 */
 void cache_flush_clock_entry (void) {
 	struct cache_entry *temp_cache_entry = list_entry(clock_hand_elem, struct cache_entry, cache_list_elem);
-	block_write(fs_device, temp_cache_entry->block_sector, temp_cache_entry->data);
+	block_write(fs_device, temp_cache_entry->block_sector, &temp_cache_entry->data);
 }
 
 /*
@@ -131,7 +131,7 @@ void cache_flush_all (void) {
 	while (elem != list_end(&cache)) {
 		entry = list_entry(elem, struct cache_entry, cache_list_elem);
 		if (entry->dirty == true) {
-			block_write(fs_device, entry->block_sector, entry->data);
+			block_write(fs_device, entry->block_sector, &entry->data);
 		}
 		free(entry);
 		elem = list_next(elem);
@@ -144,7 +144,7 @@ reads cache_entry from new_sector on disk to clock_hand_elem
 */
 void cache_read_sector_to_clock_sector(block_sector_t new_sector) {
 	struct cache_entry *temp_cache_entry = list_entry(clock_hand_elem, struct cache_entry, cache_list_elem);
-	block_read(fs_device, new_sector, temp_cache_entry->data);
+	block_read(fs_device, new_sector, &temp_cache_entry->data);
 	temp_cache_entry->dirty = false;
 	temp_cache_entry->pin = 1;
 	temp_cache_entry->block_sector = new_sector;
