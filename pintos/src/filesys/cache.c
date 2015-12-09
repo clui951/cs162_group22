@@ -6,6 +6,7 @@
 
 void cache_init (void) // initializes buffer cache
 {
+	printf("what\n");
 	list_init(&cache);
 	lock_init(&global_cache_lock);
 	cache_size = 0;
@@ -28,8 +29,8 @@ struct cache_entry * cache_get_entry (block_sector_t sector)
 		elem = list_next(elem);
 	}
 
-
-	lock_acquire(&global_cache_lock);
+	// lock_acquire(&global_cache_lock);
+	
 	/* Cache miss */
 
 	
@@ -55,7 +56,7 @@ struct cache_entry * cache_get_entry (block_sector_t sector)
 	} else {
 		return_entry = cache_clock_evict_and_replace(sector);
 	}
-	lock_release(&global_cache_lock);
+	// lock_release(&global_cache_lock);
 	return return_entry;
 }
 
@@ -93,9 +94,10 @@ struct cache_entry * cache_clock_evict_and_replace (block_sector_t new_sector) {
 advances through cache and wraps around from end to beginning of list
 */
 struct list_elem * wrapping_list_next (struct list_elem *elem) {
-	elem = list_next(elem);
-	if (elem == list_tail(&cache)) {
+	if (elem == list_end(&cache)) {
 		elem = list_begin(&cache);
+	} else {
+		elem = list_next(elem);
 	}
 	return elem;
 }

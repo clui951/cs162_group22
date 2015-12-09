@@ -99,7 +99,7 @@ inode_create (block_sector_t sector, off_t length)
               for (i = 0; i < sectors; i++) 
                 block_write (fs_device, disk_inode->start + i, zeros);
             }
-          success = true;
+          success = true; 
         } 
       free (disk_inode);
     }
@@ -203,7 +203,9 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 {
   uint8_t *buffer = buffer_;
   off_t bytes_read = 0;
-  // uint8_t *bounce = NULL;
+  uint8_t *bounce = NULL;
+
+  // lock_acquire(&global_cache_lock);
 
   while (size > 0) 
     {
@@ -221,9 +223,12 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       if (chunk_size <= 0)
         break;
 
-      struct cache_entry *entry = cache_get_entry (sector_idx);
+      printf("1\n");
 
+      struct cache_entry *entry = cache_get_entry (sector_idx);
+      // lock_acquire(&entry->cache_entry_lock);
       memcpy(buffer + bytes_read, &entry->data + sector_ofs, chunk_size);
+      // lock_release(&entry->cache_entry_lock);
 
       // if (sector_ofs == 0 && chunk_size == BLOCK_SECTOR_SIZE)
       //   {
@@ -249,7 +254,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       offset += chunk_size;
       bytes_read += chunk_size;
     }
-  // free (bounce);
+  // lock_release(&global_cache_lock);
+  free (bounce);
 
   return bytes_read;
 }
@@ -265,10 +271,12 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 {
   const uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
-  // uint8_t *bounce = NULL;
+  uint8_t *bounce = NULL;
 
   if (inode->deny_write_cnt)
     return 0;
+
+  // lock_acquire(&global_cache_lock);
 
   while (size > 0) 
     {
@@ -286,10 +294,13 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       if (chunk_size <= 0)
         break;
 
-      struct cache_entry *entry = cache_get_entry (sector_idx);
+      printf("2\n");
 
+      struct cache_entry *entry = cache_get_entry (sector_idx);
+      // lock_acquire(&entry->cache_entry_lock);
       memcpy(&entry->data + sector_ofs, buffer + bytes_written, chunk_size);
       entry->dirty = true;
+      // lock_release(&entry->cache_entry_lock);
 
       // if (sector_ofs == 0 && chunk_size == BLOCK_SECTOR_SIZE)
       //   {
@@ -322,7 +333,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       offset += chunk_size;
       bytes_written += chunk_size;
     }
-  // free (bounce);
+  // lock_release(&global_cache_lock);
+  free (bounce);
 
   return bytes_written;
 }
