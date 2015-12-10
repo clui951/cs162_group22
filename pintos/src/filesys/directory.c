@@ -26,7 +26,17 @@ struct dir_entry
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
+  if (inode_create (sector, entry_cnt * sizeof (struct dir_entry), true))
+    {
+      // printf("in dir_create, successfully created inode\n");
+      struct dir *dir = dir_open(inode_open(sector));
+      dir_add(dir, ".", sector);
+      dir_add(dir, "..", dir_get_parent(dir));
+      dir_close(dir);
+      return true;
+    }
+  else
+    return false;
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -97,9 +107,9 @@ lookup (const struct dir *dir, const char *name,
 
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
-
   for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
-       ofs += sizeof e)
+       ofs += sizeof e) {
+    // printf("ename %s name %s %d\n", e.name, name, e.in_use);
     if (e.in_use && !strcmp (name, e.name))
       {
         if (ep != NULL)
@@ -108,6 +118,7 @@ lookup (const struct dir *dir, const char *name,
           *ofsp = ofs;
         return true;
       }
+    }
   return false;
 }
 
@@ -152,11 +163,11 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   /* Check NAME for validity. */
   if (*name == '\0' || strlen (name) > NAME_MAX)
     return false;
-
+  // printf("in dir_add: name: %s\n", name);
   /* Check that NAME is not in use. */
   if (lookup (dir, name, NULL, NULL))
     goto done;
-
+  // printf("in dir_add: name not in use, name: %s\n", name);
   /* Set OFS to offset of free slot.
      If there are no free slots, then it will be set to the
      current end-of-file.
@@ -168,12 +179,14 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
        ofs += sizeof e)
     if (!e.in_use)
       break;
-
+  // printf("ofs: %d\n", ofs);
   /* Write slot. */
   e.in_use = true;
   strlcpy (e.name, name, sizeof e.name);
   e.inode_sector = inode_sector;
-  success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
+  off_t inode_write = inode_write_at (dir->inode, &e, sizeof e, ofs);
+  // printf("%d == %d\n", inode_write, sizeof e);
+  success = inode_write == sizeof e;
 
  done:
   inode_lock_release(dir_get_inode(dir));
@@ -238,4 +251,12 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
     }
   inode_lock_release(dir_get_inode(dir));
   return false;
+}
+
+struct dir *
+dir_get_parent (struct dir *dir)
+{
+  struct inode *inode = NULL;
+  dir_lookup(dir, "..", &inode);
+  return (struct dir *)file_open(inode);
 }

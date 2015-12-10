@@ -144,7 +144,11 @@ syscall_handler (struct intr_frame *f UNUSED)
 				}
 			case SYS_READDIR: // Reads a directory entry.
 				{
-
+					check_valid_pointer((const void *)args[2]);
+					args[2] = (int)pagedir_get_page(thread_current()->pagedir,
+													(const void *)args[2]);
+					f->eax = readdir(args[1], (const char *)args[2]);
+					break;
 				}
 			case SYS_ISDIR: // Tests if a fd represents a directory.
 				{
@@ -153,7 +157,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 				}
 			case SYS_INUMBER: // Returns the inode number for a fd.
 				{
-
+					f->eax = inumber(args[1]);
+					break;
 				}
 		}
 }
@@ -238,6 +243,8 @@ remove (const char *file)
 {
 	if (!file)
 		exit(-1);
+	if (strcmp(file, "/") == 0)
+		return false;
 	lock_acquire(&file_lock);
 	bool success = filesys_remove(file);
 	lock_release(&file_lock);
@@ -456,7 +463,20 @@ mkdir (const char *dir)
 bool
 readdir (int fd, char name[READDIR_MAX_LEN + 1])
 {
-	// uses dir_readdir
+	if (fd < 2 || fd > 127)
+		exit(-1);
+	lock_acquire(&file_lock);
+	struct thread *current = thread_current();
+	struct file *file = current->file_des[fd];
+	if (!file)
+		{
+			lock_release(&file_lock);
+			return false;
+		}
+	if (!inode_is_dir(file_get_inode(file)))
+		return false;
+	if (dir_readdir((struct dir *)file, name))
+		return true;
 	return false;
 }
 
@@ -471,13 +491,13 @@ isdir (int fd)
 	if (!file)
 		{
 			lock_release(&file_lock);
-			exit(-1);
+			return false;
 		}
 	struct inode *inode = file_get_inode (file);
 	if (!inode)
 		{
 			lock_release(&file_lock);
-			exit(-1);
+			return false;
 		}
 	bool is_dir = inode_is_dir(inode);
 	lock_release(&file_lock);
@@ -487,5 +507,19 @@ isdir (int fd)
 int
 inumber (int fd)
 {
-	return 0;
+	if (fd < 128 && fd >1)
+		{
+			lock_acquire(&file_lock);
+			struct file *file = thread_current()->file_des[fd];
+			if (!file)
+				{
+					lock_release(&file_lock);
+					return -1;
+				}
+			block_sector_t inumber = inode_get_inumber(file_get_inode (file));
+			lock_release(&file_lock);
+			return inumber;
+		}
+	else
+		return -1;
 }

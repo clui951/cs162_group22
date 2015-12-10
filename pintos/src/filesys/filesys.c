@@ -53,12 +53,20 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
 {
   block_sector_t inode_sector = 0;
   struct dir *dir = get_dir (name);
+  // if (inode_is_dir(file_get_inode(dir)))
+    // dir = dir_open(file_get_inode(dir));
   name = get_filename(name);
   // if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0) TODO: not sure if need
   bool success = (dir != NULL
-                  && free_map_allocate (1, &inode_sector)
-                  && inode_create (inode_sector, initial_size, is_dir)
-                  && dir_add (dir, name, inode_sector));
+              && free_map_allocate (1, &inode_sector));
+  // printf("in filesys_create, name: %s, success: %d\n", name, success);
+  if (is_dir)
+    success = success && dir_create (inode_sector, 16); // TODO: change 16 to initial_size when extensible files are done
+  else
+    success = success && inode_create (inode_sector, initial_size, is_dir);
+  // printf("in filesys_create, after dir/inode create, success: %d\n", success);
+  success = success && dir_add (dir, name, inode_sector);
+  // printf("in filesys_create, after dir_add, success: %d\n", success);
   if (!success && inode_sector != 0)
     free_map_release (inode_sector, 1);
   dir_close (dir);
@@ -74,15 +82,21 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
 struct file *
 filesys_open (const char *name)
 {
+  // printf("start: in filesys open name: %s\n", name);
   struct dir *dir = get_dir (name);
   name = get_filename(name);
   struct inode *inode = NULL;
-
+  // printf("middle: in filesys open name: %s\n", name);
   if (dir != NULL)
     dir_lookup (dir, name, &inode);
   dir_close (dir);
   free(name);
-  return file_open (inode);
+  if (!inode) {
+    return NULL;
+  }
+  if (!inode_is_dir(dir_get_inode(dir)))
+    return file_open(inode);
+  return dir_open(inode);
 }
 
 /* Deletes the file named NAME.
@@ -105,22 +119,31 @@ filesys_remove (const char *name)
 bool
 filesys_chdir (const char *name)
 {
+  // printf("start of filesys chdir, name: %s\n", name);
+  // struct dir *dir = get_dir (name);
+  // if (!dir)
+  //   return false;
+  // struct thread *current = thread_current();
+  // dir_close(current->cwd);
+  // current->cwd = dir;
+  // return true;
+
   struct dir *dir = get_dir (name);
-  name = get_filename(name);
-  struct inode *inode = NULL;
-  if (dir != NULL)
-    dir_lookup (dir, name, &inode);
-  dir_close(dir);
-  free(name);
-  dir = dir_open(inode);
-  if (dir)
-    {
-      struct thread *current = thread_current();
-      dir_close(current->cwd);
-      current->cwd = dir;
-      return true;
-    }
-  return false;
+    name = get_filename(name);
+    struct inode *inode = NULL;
+    if (dir != NULL)
+      dir_lookup (dir, name, &inode);
+    dir_close(dir);
+    free(name);
+    dir = dir_open(inode);
+    if (dir)
+      {
+        struct thread *current = thread_current();
+        dir_close(current->cwd);
+        current->cwd = dir;
+        return true;
+      }
+    return false;
 }
 
 /* Formats the file system. */
@@ -138,15 +161,17 @@ do_format (void)
 struct dir*
 get_dir (const char *path)
 {
-  if (strcmp(path, "/") == 0)
+  if (strcmp(path, "/") == 0) {
+    printf("in get dir just opening root\n");
     return dir_open_root ();
+  }
 
   struct inode *inode;
   struct dir *dir;
   struct thread *current = thread_current ();
   char path_copy[strlen(path) + 1];
   memcpy(path_copy, path, strlen(path) + 1);
-  char *saveptr, *token;
+  char *saveptr, *token, *next_token;
 
   if (strcmp(&path_copy[0], "/") == 0 || !current->cwd) {
     // printf("setting dir to root\n");
@@ -157,31 +182,25 @@ get_dir (const char *path)
     dir = dir_reopen (current->cwd);
   }
 
-  for (token = strtok_r (path_copy, "/", &saveptr); token != NULL; token = strtok_r (NULL, "/", &saveptr))
+  for (token = strtok_r (path_copy, "/", &saveptr); token != NULL; token = next_token)
     {
-      // printf("token: %s\n", token);
+      next_token = strtok_r (NULL, "/", &saveptr);
       if (!dir) {
-        // printf("dir not set, returning NULL\n");
         return NULL;
       }
       if (dir_lookup (dir, token, &inode))
         {
-          // printf("in get_dir: token - %s\n", token);
-          if (inode_is_dir(inode))
+          if (inode_is_dir(inode) && next_token != NULL) //(strcmp(token, get_filename(path)) != 0)
             {
               dir_close (dir);
-              // printf("opening next inode\n");
               dir = dir_open (inode);
-              // printf("successfully opened next inode\n");
             }
           else {
-            // printf("inode isn't dir\n");
             inode_close(inode);
             break;
           }
         }
       else {
-        // printf("token is not dir, returning current dir\n");
         break;
       }
     }
@@ -191,7 +210,6 @@ get_dir (const char *path)
 char*
 get_filename (const char *path)
 {
-  // printf("path: %s\n", path);
   char path_copy[strlen(path) + 1];
   memcpy(path_copy, path, strlen(path) + 1);
   char *saveptr;
@@ -206,7 +224,6 @@ get_filename (const char *path)
     next_token = strtok_r (NULL, "/", &saveptr);
   }
 
-  // printf("in get_filename: path - %s, token - %s\n", path, token);
   if (!token)
     token = "";
   char *file_name = malloc(strlen(token) + 1);
