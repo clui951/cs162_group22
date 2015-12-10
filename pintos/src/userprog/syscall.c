@@ -12,6 +12,7 @@
 #include "userprog/process.h"
 #include "userprog/pagedir.h"
 #include "devices/shutdown.h"
+#include "filesys/inode.h"
 
 #define MIN_VALID_VADDR ((void *) 0x08048000)
 
@@ -125,6 +126,35 @@ syscall_handler (struct intr_frame *f UNUSED)
 					f->eax = practice(args[1]);
 					break;
 				}
+			case SYS_CHDIR: // Change the current directory.
+				{
+					check_valid_pointer((const void *)args[1]);
+					args[1] = (int)pagedir_get_page(thread_current()->pagedir,
+													(const void *)args[1]);
+					f->eax = chdir((const char *)args[1]);
+					break;
+				}
+			case SYS_MKDIR: // Create a directory.
+				{
+					check_valid_pointer((const void *)args[1]);
+					args[1] = (int)pagedir_get_page(thread_current()->pagedir,
+													(const void *)args[1]);
+					f->eax = mkdir((const char *)args[1]);
+					break;
+				}
+			case SYS_READDIR: // Reads a directory entry.
+				{
+
+				}
+			case SYS_ISDIR: // Tests if a fd represents a directory.
+				{
+					f->eax = isdir(args[1]);
+					break;
+				}
+			case SYS_INUMBER: // Returns the inode number for a fd.
+				{
+
+				}
 		}
 }
 
@@ -198,7 +228,7 @@ create (const char *file, unsigned initial_size)
 	if (!file)
 		exit(-1);
 	lock_acquire(&file_lock);
-	bool success = filesys_create(file, initial_size);
+	bool success = filesys_create(file, initial_size, false);
 	lock_release(&file_lock);
 	return success;
 }
@@ -278,6 +308,18 @@ read (int fd, void *buffer, unsigned length)
 					lock_release(&file_lock);
 					return -1;
 				}
+			struct inode *inode = file_get_inode (file);
+			if (!inode)
+				{
+					lock_release(&file_lock);
+					return -1;
+				}
+			bool is_dir = inode_is_dir(inode);
+			if (is_dir)
+				{
+					lock_release(&file_lock);
+					return -1;
+				}
 			int read = file_read(file, buffer, length);
 			lock_release(&file_lock);
 			return read;
@@ -302,6 +344,18 @@ write (int fd, const void *buffer, unsigned length)
 			struct thread *current = thread_current();
 			struct file *file = current->file_des[fd];
 			if (!file)
+				{
+					lock_release(&file_lock);
+					return -1;
+				}
+			struct inode *inode = file_get_inode (file);
+			if (!inode)
+				{
+					lock_release(&file_lock);
+					return -1;
+				}
+			bool is_dir = inode_is_dir(inode);
+			if (is_dir)
 				{
 					lock_release(&file_lock);
 					return -1;
@@ -366,7 +420,17 @@ close (int fd)
 			lock_release(&file_lock);
 			exit(-1);
 		}
-	file_close(file);
+	struct inode *inode = file_get_inode (file);
+	if (!inode)
+		{
+			lock_release(&file_lock);
+			return -1;
+		}
+	bool is_dir = inode_is_dir(inode);
+	if (is_dir)
+		dir_close((struct dir *) inode);
+	else
+		file_close(file);
 	current->file_des[fd] = 0;
 	lock_release(&file_lock);
 }
@@ -375,4 +439,53 @@ int
 practice (int i)
 {
 	return i + 1;
+}
+
+bool
+chdir (const char *dir)
+{
+	return filesys_chdir(dir);
+}
+
+bool
+mkdir (const char *dir)
+{
+	return filesys_create(dir, 0, true);
+}
+
+bool
+readdir (int fd, char name[READDIR_MAX_LEN + 1])
+{
+	// uses dir_readdir
+	return false;
+}
+
+bool
+isdir (int fd)
+{
+	if (fd < 2 || fd > 127)
+		exit(-1);
+	lock_acquire(&file_lock);
+	struct thread *current = thread_current();
+	struct file *file = current->file_des[fd];
+	if (!file)
+		{
+			lock_release(&file_lock);
+			exit(-1);
+		}
+	struct inode *inode = file_get_inode (file);
+	if (!inode)
+		{
+			lock_release(&file_lock);
+			exit(-1);
+		}
+	bool is_dir = inode_is_dir(inode);
+	lock_release(&file_lock);
+	return is_dir;
+}
+
+int
+inumber (int fd)
+{
+	return 0;
 }
