@@ -14,7 +14,7 @@ void cache_init (void) // initializes buffer cache
 struct cache_entry * cache_get_entry (block_sector_t sector)
 {
 	lock_acquire(&global_cache_lock);
-
+	// printf("Getting cache entry from sector %d\n", sector);
 	struct cache_entry *entry;
 	struct list_elem *elem = list_begin(&cache);
 
@@ -22,9 +22,7 @@ struct cache_entry * cache_get_entry (block_sector_t sector)
 	while (elem != list_end(&cache)) {
 		entry = list_entry(elem, struct cache_entry, cache_list_elem);
 		if (entry->block_sector == sector) {
-			if (entry->pin == 0) {
-				entry->pin = 1;
-			}
+			entry->pin = 1;			
 			lock_release(&global_cache_lock);
 			return entry;
 		}
@@ -39,15 +37,14 @@ struct cache_entry * cache_get_entry (block_sector_t sector)
 		cache_size++ */
 	struct cache_entry *return_entry;
 	if (cache_size < 64) {
-		struct cache_entry *new_entry = malloc(sizeof(struct cache_entry));
-		block_read(fs_device, sector, &new_entry->data);
-		new_entry->block_sector = sector;
-		new_entry->pin = 1;
-		new_entry->dirty = false;
-		new_entry->threads_reading = 0;
-		// lock_init(&(new_entry->cache_entry_lock));
-		list_push_back(&cache, &(new_entry->cache_list_elem));
-		return_entry = new_entry;
+		return_entry = malloc(sizeof(struct cache_entry));
+		block_read(fs_device, sector, &return_entry->data);
+		return_entry->block_sector = sector;
+		return_entry->pin = 1;
+		return_entry->dirty = false;
+		return_entry->threads_reading = 0;
+		// lock_init(&(return_entry->cache_entry_lock));
+		list_push_back(&cache, &return_entry->cache_list_elem);
 		cache_size++;
 		if (clock_hand_elem == NULL) { 		// only happens on the first time;
 			clock_hand_elem = list_back(&cache);

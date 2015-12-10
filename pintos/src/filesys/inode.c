@@ -224,7 +224,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       // printf("inode_start_read\n");
       struct cache_entry *entry = cache_get_entry (sector_idx);
       // printf("inode_end_read\n");
-      memcpy(buffer + bytes_read, &entry->data + sector_ofs, chunk_size);
+      memcpy(buffer + bytes_read, (uint8_t *) &entry->data + sector_ofs, chunk_size);
       
       /* Advance. */
       size -= chunk_size;
@@ -269,7 +269,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       // printf("inode_start_write\n");
       struct cache_entry *entry = cache_get_entry (sector_idx);
       // printf("inode_end_write\n");
-      memcpy(&entry->data + sector_ofs, buffer + bytes_written, chunk_size);
+      memcpy((uint8_t *) &entry->data + sector_ofs, buffer + bytes_written, chunk_size);
       entry->dirty = true;
 
       /* Advance. */
