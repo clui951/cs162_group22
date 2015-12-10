@@ -94,6 +94,7 @@ filesys_open (const char *name)
   if (!inode) {
     return NULL;
   }
+  // printf("in filesys_open, about to return opened file\n");
   if (!inode_is_dir(dir_get_inode(dir)))
     return file_open(inode);
   return dir_open(inode);

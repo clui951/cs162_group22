@@ -159,7 +159,7 @@ inode_open (block_sector_t sector)
   inode = malloc (sizeof *inode);
   if (inode == NULL)
     return NULL;
-
+  // printf("in inode_open, initializing\n");
   /* Initialize. */
   list_push_front (&open_inodes, &inode->elem);
   inode->sector = sector;
@@ -167,7 +167,9 @@ inode_open (block_sector_t sector)
   inode->deny_write_cnt = 0;
   inode->removed = false;
   lock_init(&inode->inode_lock);
-  block_read (fs_device, inode->sector, &inode->data); // TODO: change to cache
+  // block_read (fs_device, inode->sector, &inode->data); // TODO: change to cache
+  struct cache_entry *entry = cache_get_entry (sector);
+  memcpy(&inode->data, &entry->data, BLOCK_SECTOR_SIZE);
   inode->is_dir = inode->data.is_dir;
   inode->length = inode->data.length;
   return inode;

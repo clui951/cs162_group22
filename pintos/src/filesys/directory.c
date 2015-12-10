@@ -107,6 +107,7 @@ lookup (const struct dir *dir, const char *name,
 
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
+  // printf("in lookup, about to start for loop\n");
   for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
        ofs += sizeof e) {
     // printf("ename %s name %s %d\n", e.name, name, e.in_use);
@@ -116,6 +117,7 @@ lookup (const struct dir *dir, const char *name,
           *ep = e;
         if (ofsp != NULL)
           *ofsp = ofs;
+        // printf("in lookup, successful lookup\n");
         return true;
       }
     }
@@ -136,6 +138,7 @@ dir_lookup (const struct dir *dir, const char *name,
   ASSERT (name != NULL);
 
   inode_lock_acquire(dir_get_inode(dir));
+  // printf("in dir_lookup, about to do lookup\n");
   if (lookup (dir, name, &e, NULL))
     *inode = inode_open (e.inode_sector);
   else
