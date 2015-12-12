@@ -24,15 +24,19 @@ struct dir_entry
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
 bool
-dir_create (block_sector_t sector, size_t entry_cnt)
+dir_create (block_sector_t parent_sector, block_sector_t sector, size_t entry_cnt)
 {
   if (inode_create (sector, entry_cnt * sizeof (struct dir_entry), true))
     {
-      // printf("in dir_create, successfully created inode\n");
       struct dir *dir = dir_open(inode_open(sector));
+      if (!dir)
+        return false;
       dir_add(dir, ".", sector);
-      dir_add(dir, "..", dir_get_parent(dir));
+      //     printf("added cur file\n");
+      dir_add(dir, "..", parent_sector);
+      //     printf("added parent file\n");
       dir_close(dir);
+          // printf("success!!!!!\n");
       return true;
     }
   else
@@ -113,6 +117,7 @@ lookup (const struct dir *dir, const char *name,
     // printf("ename %s name %s %d\n", e.name, name, e.in_use);
     if (e.in_use && !strcmp (name, e.name))
       {
+        // printf("but why\n");
         if (ep != NULL)
           *ep = e;
         if (ofsp != NULL)
@@ -137,13 +142,13 @@ dir_lookup (const struct dir *dir, const char *name,
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
 
-  inode_lock_acquire(dir_get_inode(dir));
+  // inode_lock_acquire(dir_get_inode(dir));
   // printf("in dir_lookup, about to do lookup\n");
   if (lookup (dir, name, &e, NULL))
     *inode = inode_open (e.inode_sector);
   else
     *inode = NULL;
-  inode_lock_release(dir_get_inode(dir));
+  // inode_lock_release(dir_get_inode(dir));
   return *inode != NULL;
 }
 
@@ -162,7 +167,7 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
 
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
-  inode_lock_acquire(dir_get_inode(dir));
+  // inode_lock_acquire(dir_get_inode(dir));
   /* Check NAME for validity. */
   if (*name == '\0' || strlen (name) > NAME_MAX)
     return false;
@@ -192,7 +197,7 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   success = inode_write == sizeof e;
 
  done:
-  inode_lock_release(dir_get_inode(dir));
+  // inode_lock_release(dir_get_inode(dir));
   return success;
 }
 
@@ -209,7 +214,7 @@ dir_remove (struct dir *dir, const char *name)
 
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
-  inode_lock_acquire(dir_get_inode(dir));
+  // inode_lock_acquire(dir_get_inode(dir));
   /* Find directory entry. */
   if (!lookup (dir, name, &e, &ofs))
     goto done;
@@ -230,7 +235,7 @@ dir_remove (struct dir *dir, const char *name)
 
  done:
   inode_close (inode);
-  inode_lock_release(dir_get_inode(dir));
+  // inode_lock_release(dir_get_inode(dir));
   return success;
 }
 
@@ -241,25 +246,36 @@ bool
 dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
 {
   struct dir_entry e;
-  inode_lock_acquire(dir_get_inode(dir));
+  // inode_lock_acquire(dir_get_inode(dir));
+  // printf("hi\n");
   while (inode_read_at (dir->inode, &e, sizeof e, dir->pos) == sizeof e)
     {
+      printf("%s\n", e.name);
       dir->pos += sizeof e;
       if (e.in_use)
         {
           strlcpy (name, e.name, NAME_MAX + 1);
-          inode_lock_release(dir_get_inode(dir));
+          // inode_lock_release(dir_get_inode(dir));
           return true;
         }
     }
-  inode_lock_release(dir_get_inode(dir));
+  // inode_lock_release(dir_get_inode(dir));
   return false;
 }
 
 struct dir *
 dir_get_parent (struct dir *dir)
 {
-  struct inode *inode = NULL;
-  dir_lookup(dir, "..", &inode);
-  return (struct dir *)file_open(inode);
+  // struct dir *root = dir_open_root();
+  // if (inode_get_inumber(dir_get_inode(dir)) == inode_get_inumber(dir_get_inode(root)))
+  //   return root;
+
+  // struct inode *inode = NULL;
+  // dir_lookup(dir, "..", &inode);
+  // printf("hi3\n");
+  // if (inode_get_inumber(dir_get_inode(dir)) == inode_get_inumber(inode))
+  //   printf("wow my parent is root!\n");
+  // dir_close(root);
+  // return dir_open(inode);
+  return inode_get_parent(dir_get_inode(dir));
 }

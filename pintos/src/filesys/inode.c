@@ -12,7 +12,7 @@
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 #define MAX_FILESIZE 8388608
-#define NUM_DIR_PTRS 122
+#define NUM_DIR_PTRS 121
 #define NUM_INDIR_PTRS 1
 #define NUM_DOUBLE_INDIR_PTRS 1
 #define SIZE_INDIR_ARRAY 128
@@ -28,6 +28,7 @@ struct inode_disk
     block_sector_t direct[NUM_DIR_PTRS];
     block_sector_t indirect[NUM_INDIR_PTRS];
     block_sector_t doubly_indirect[NUM_DOUBLE_INDIR_PTRS];
+    block_sector_t parent;
     // uint32_t unused[125];               /* Not used. */
   };
 
@@ -48,9 +49,7 @@ struct inode
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
     struct inode_disk data;             /* Inode content. */
-    bool is_dir;                        /* True if directory. */
     struct lock inode_lock;             /* Lock in order to operate on inode. */
-    off_t length;                       /* File size in bytes. */
   };
 
 /* Returns the block device sector that contains byte offset POS
@@ -116,6 +115,8 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
       disk_inode->is_dir = is_dir;
+      disk_inode->parent = ROOT_DIR_SECTOR;
+      // printf("INODE CREATE is dir set to %d\n", disk_inode->is_dir);
       if (free_map_allocate (sectors, &disk_inode->start))
         {
           block_write (fs_device, sector, disk_inode);
@@ -159,7 +160,7 @@ inode_open (block_sector_t sector)
   inode = malloc (sizeof *inode);
   if (inode == NULL)
     return NULL;
-  // printf("in inode_open, initializing\n");
+
   /* Initialize. */
   list_push_front (&open_inodes, &inode->elem);
   inode->sector = sector;
@@ -170,8 +171,6 @@ inode_open (block_sector_t sector)
   // block_read (fs_device, inode->sector, &inode->data); // TODO: change to cache
   struct cache_entry *entry = cache_get_entry (sector);
   memcpy(&inode->data, &entry->data, BLOCK_SECTOR_SIZE);
-  inode->is_dir = inode->data.is_dir;
-  inode->length = inode->data.length;
   return inode;
 }
 
@@ -334,13 +333,13 @@ inode_allow_write (struct inode *inode)
 off_t
 inode_length (const struct inode *inode)
 {
-  return inode->length;
+  return inode->data.length;
 }
 
 bool
 inode_is_dir (struct inode *inode)
 {
-  return inode->is_dir;
+  return inode->data.is_dir;
 }
 
 void
@@ -355,6 +354,22 @@ inode_lock_release (struct inode *inode)
   lock_release(&inode->inode_lock);
 }
 
+block_sector_t
+inode_get_parent (struct inode *inode)
+{
+  return inode->data.parent;
+}
+
+bool
+inode_add_parent (block_sector_t child_sector, block_sector_t parent_sector)
+{
+  struct inode *child = inode_open(child_sector);
+  if (!child)
+    return false;
+  inode_close(child);
+  child->data.parent = parent_sector;
+  return true;
+}
 // void inode_allocate ();
 // void inode_deallocate ();
 // void inode_expand (struct inode *inode, off_t length);

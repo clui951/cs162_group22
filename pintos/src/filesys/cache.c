@@ -22,13 +22,13 @@ struct cache_entry * cache_get_entry (block_sector_t sector)
 	while (elem != list_end(&cache)) {
 		entry = list_entry(elem, struct cache_entry, cache_list_elem);
 		if (entry->block_sector == sector) {
-			entry->pin = 1;			
+			entry->pin = 1;
 			lock_release(&global_cache_lock);
 			return entry;
 		}
 		elem = list_next(elem);
 	}
-	
+
 	/* Cache miss */
 
 	/* if cache size < max possible:
@@ -57,14 +57,14 @@ struct cache_entry * cache_get_entry (block_sector_t sector)
 }
 
 
-/* 
-Clock algorithm: searches for next cache entry to evict, while advancing clockhand 
-replaces it with new_sector, which is read from disk 
+/*
+Clock algorithm: searches for next cache entry to evict, while advancing clockhand
+replaces it with new_sector, which is read from disk
 returns cache_entry that was evicted/replaced
 */
 struct cache_entry * cache_clock_evict_and_replace (block_sector_t new_sector) {
 
-	struct cache_entry *temp_cache_entry; 
+	struct cache_entry *temp_cache_entry;
 	while (true) {
 		// access cache entry that clock is pointing at
 		temp_cache_entry = list_entry(clock_hand_elem, struct cache_entry, cache_list_elem);
@@ -87,7 +87,7 @@ struct cache_entry * cache_clock_evict_and_replace (block_sector_t new_sector) {
 }
 
 
-/* 
+/*
 advances through cache and wraps around from end to beginning of list
 */
 struct list_elem * wrapping_list_next (struct list_elem *elem) {
@@ -108,7 +108,7 @@ void increment_clock (void) {
 }
 
 
-/* 
+/*
 writes cache_entry indicated by clock_hand_elem to disk
 */
 void cache_flush_clock_entry (void) {
@@ -138,7 +138,7 @@ void cache_flush_all (void) {
 }
 
 
-/* 
+/*
 reads cache_entry from new_sector on disk to clock_hand_elem
 */
 void cache_read_sector_to_clock_sector(block_sector_t new_sector) {
@@ -167,7 +167,7 @@ void cache_read_sector_to_clock_sector(block_sector_t new_sector) {
 // don't need write
 // */
 // void cache_write_sector (block_sector_t sector, void* buffer) { // buffer cache is always writeback, don't need separate method for writeback
-	
+
 // 	lock_acquire(&global_cache_lock);
 
 // 	struct cache_entry *entry;
@@ -202,7 +202,7 @@ void cache_read_sector_to_clock_sector(block_sector_t new_sector) {
 // 	} else {
 // 		// evict entry (flush, clock alg)
 // 		struct cache_entry *write_entry = cache_clock_evict_and_replace(sector);
-// 		// write data to entry just flushed and update sector # 
+// 		// write data to entry just flushed and update sector #
 // 		memcpy(write_entry->data, buffer, BLOCK_SECTOR_SIZE);
 // 		write_entry->pin = 1;
 

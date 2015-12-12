@@ -13,8 +13,9 @@
 struct block *fs_device;
 
 static void do_format (void);
-struct dir* get_dir (const char *path);
+struct dir* get_dir (const char *path, bool to_remove);
 char* get_filename (const char *path);
+bool path_is_dir (const char *path);
 
 /* Initializes the file system module.
    If FORMAT is true, reformats the file system. */
@@ -51,26 +52,30 @@ filesys_done (void)
 bool
 filesys_create (const char *name, off_t initial_size, bool is_dir)
 {
+  // printf("in filesys create, before everything, is_dir %d\n", is_dir);
   block_sector_t inode_sector = 0;
-  struct dir *dir = get_dir (name);
-  // if (inode_is_dir(file_get_inode(dir)))
-    // dir = dir_open(file_get_inode(dir));
-  name = get_filename(name);
-  // if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0) TODO: not sure if need
+  struct dir *dir = get_dir (name, false);
+  char *file_name = get_filename(name);
   bool success = (dir != NULL
               && free_map_allocate (1, &inode_sector));
-  // printf("in filesys_create, name: %s, success: %d\n", name, success);
+  // printf("in filesys_create, name: %s, success: %d, is_dir: %d\n", file_name, success, is_dir);
   if (is_dir)
-    success = success && dir_create (inode_sector, 16); // TODO: change 16 to initial_size when extensible files are done
+    {
+      // printf("in filesys create, it's a directory!\n");
+      block_sector_t parent_sector = inode_get_inumber(dir_get_inode(dir));
+      success = success && dir_create (parent_sector, inode_sector, 16); // TODO: change 16 to initial_size when extensible files are done
+    }
   else
-    success = success && inode_create (inode_sector, initial_size, is_dir);
-  // printf("in filesys_create, after dir/inode create, success: %d\n", success);
-  success = success && dir_add (dir, name, inode_sector);
-  // printf("in filesys_create, after dir_add, success: %d\n", success);
+    {
+      success = success && inode_create (inode_sector, initial_size, is_dir);
+      // printf("in filesys_create, after dir_add, success: %d\n", success);
+    }
+  success = success && dir_add (dir, file_name, inode_sector);
+  inode_add_parent(inode_sector, inode_get_inumber(dir_get_inode(dir)));
   if (!success && inode_sector != 0)
     free_map_release (inode_sector, 1);
   dir_close (dir);
-  free(name);
+  free(file_name);
   return success;
 }
 
@@ -83,21 +88,28 @@ struct file *
 filesys_open (const char *name)
 {
   // printf("start: in filesys open name: %s\n", name);
-  struct dir *dir = get_dir (name);
-  name = get_filename(name);
+  struct dir *dir = get_dir (name, false);
+  if (!strcmp(name, "/") || path_is_dir(name)) {
+    // printf("returning dir\n");
+    return dir;
+  }
+  char *file_name = "";
+  if (strcmp(name, ""))
+    file_name = get_filename(name);
   struct inode *inode = NULL;
-  // printf("middle: in filesys open name: %s\n", name);
+  // printf("filesys open name: %s\n", file_name);
   if (dir != NULL)
-    dir_lookup (dir, name, &inode);
+    dir_lookup (dir, file_name, &inode);
+  // printf("is dir? %d\n", inode_is_dir(inode));
   dir_close (dir);
-  free(name);
+
+  if (strcmp(name, ""))
+    free(file_name);
   if (!inode) {
     return NULL;
   }
-  // printf("in filesys_open, about to return opened file\n");
-  if (!inode_is_dir(dir_get_inode(dir)))
-    return file_open(inode);
-  return dir_open(inode);
+  // printf("file?\n");
+  return file_open(inode);
 }
 
 /* Deletes the file named NAME.
@@ -107,11 +119,25 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name)
 {
-  struct dir *dir = get_dir (name);
-  name = get_filename(name);
-  bool success = dir != NULL && dir_remove (dir, name);
+  struct dir *dir;
+  struct thread *current = thread_current();
+  if (current->cwd) {
+    dir = get_dir (name, false);
+    if (inode_get_inumber(dir_get_inode(current->cwd)) == inode_get_inumber(dir_get_inode(dir))) {
+      dir_close(dir);
+      return false;
+    }
+  }
+  dir = get_dir (name, true);
+  char *file_name = get_filename(name);
+  // if (path_is_dir(name))
+  //   file_name = ".";
+  // printf("%s\n", file_name);
+  bool success = dir != NULL && dir_remove (dir, file_name);
   dir_close (dir);
-  free(name);
+  // if (!path_is_dir(name))
+  free(file_name);
+  // printf("fail? %d\n", success);
   return success;
 }
 
@@ -121,30 +147,32 @@ bool
 filesys_chdir (const char *name)
 {
   // printf("start of filesys chdir, name: %s\n", name);
+  struct dir *dir = get_dir (name, false);
+  if (!dir)
+    return false;
+  struct thread *current = thread_current();
+  dir_close(current->cwd);
+  current->cwd = dir;
+  return true;
+
   // struct dir *dir = get_dir (name);
+  // char *file_name = get_filename(name);
+  // struct inode *inode = NULL;
   // if (!dir)
   //   return false;
-  // struct thread *current = thread_current();
-  // dir_close(current->cwd);
-  // current->cwd = dir;
-  // return true;
-
-  struct dir *dir = get_dir (name);
-    name = get_filename(name);
-    struct inode *inode = NULL;
-    if (dir != NULL)
-      dir_lookup (dir, name, &inode);
-    dir_close(dir);
-    free(name);
-    dir = dir_open(inode);
-    if (dir)
-      {
-        struct thread *current = thread_current();
-        dir_close(current->cwd);
-        current->cwd = dir;
-        return true;
-      }
-    return false;
+  // if (dir != NULL)
+  //   dir_lookup (dir, file_name, &inode);
+  // dir_close(dir);
+  // free(file_name);
+  // dir = dir_open(inode);
+  // if (dir)
+  //   {
+  //     struct thread *current = thread_current();
+  //     dir_close(current->cwd);
+  //     current->cwd = dir;
+  //     return true;
+  //   }
+  // return false;
 }
 
 /* Formats the file system. */
@@ -153,17 +181,16 @@ do_format (void)
 {
   printf ("Formatting file system...");
   free_map_create ();
-  if (!dir_create (ROOT_DIR_SECTOR, 16))
+  if (!dir_create (ROOT_DIR_SECTOR, ROOT_DIR_SECTOR, 16))
     PANIC ("root directory creation failed");
   free_map_close ();
   printf ("done.\n");
 }
 
 struct dir*
-get_dir (const char *path)
+get_dir (const char *path, bool to_remove)
 {
-  if (strcmp(path, "/") == 0) {
-    printf("in get dir just opening root\n");
+  if (!strcmp(path, "/")) {
     return dir_open_root ();
   }
 
@@ -174,12 +201,10 @@ get_dir (const char *path)
   memcpy(path_copy, path, strlen(path) + 1);
   char *saveptr, *token, *next_token;
 
-  if (strcmp(&path_copy[0], "/") == 0 || !current->cwd) {
-    // printf("setting dir to root\n");
+  if (!strcmp(&path_copy[0], "/") || !current->cwd) {
     dir = dir_open_root ();
   }
   else {
-    // printf("reopening cwd as dir\n");
     dir = dir_reopen (current->cwd);
   }
 
@@ -191,7 +216,11 @@ get_dir (const char *path)
       }
       if (dir_lookup (dir, token, &inode))
         {
-          if (inode_is_dir(inode) && next_token != NULL) //(strcmp(token, get_filename(path)) != 0)
+          if (to_remove && next_token == NULL) {
+            inode_close(inode);
+            break;
+          }
+          else if (inode_is_dir(inode))
             {
               dir_close (dir);
               dir = dir_open (inode);
@@ -202,6 +231,7 @@ get_dir (const char *path)
           }
         }
       else {
+        inode_close(inode);
         break;
       }
     }
@@ -211,14 +241,17 @@ get_dir (const char *path)
 char*
 get_filename (const char *path)
 {
-  char path_copy[strlen(path) + 1];
+  char *path_copy = malloc(strlen(path) + 1);
   memcpy(path_copy, path, strlen(path) + 1);
   char *saveptr;
   char *token = strtok_r (path_copy, "/", &saveptr);
   char *next_token = strtok_r (NULL, "/", &saveptr);
+  struct dir *dir;
+  struct inode *inode;
 
-  if (strcmp(path, "/") == 0)
-    return *path_copy;
+  if (!strcmp(path, "/")) {
+    return path_copy;
+  }
 
   while (next_token != NULL) {
     token = next_token;
@@ -229,5 +262,59 @@ get_filename (const char *path)
     token = "";
   char *file_name = malloc(strlen(token) + 1);
   memcpy(file_name, token, strlen(token) + 1);
+  free(path_copy);
   return file_name;
+}
+
+bool
+path_is_dir (const char *path)
+{
+  if (!strcmp(path, ""))
+    return false;
+  if (!strcmp(path, "/"))
+    return true;
+
+  struct inode *inode;
+  struct dir *dir;
+  struct thread *current = thread_current ();
+  char path_copy[strlen(path) + 1];
+  memcpy(path_copy, path, strlen(path) + 1);
+  char *saveptr, *token;
+
+  if (!strcmp(&path_copy[0], "/") || !current->cwd) {
+    dir = dir_open_root ();
+  }
+  else {
+    dir = dir_reopen (current->cwd);
+  }
+  for (token = strtok_r (path_copy, "/", &saveptr); token != NULL; token = strtok_r (NULL, "/", &saveptr))
+    {
+      if (!dir) {
+        return false;
+      }
+      // printf("%s\n", token);
+      if (dir_lookup (dir, token, &inode))
+        {
+          if (inode_is_dir(inode))
+            {
+              dir_close (dir);
+              dir = dir_open (inode);
+            }
+          else {
+            inode_close(inode);
+            dir_close(dir);
+            return false;
+          }
+        }
+      else {
+        dir_close(dir);
+        inode_close(inode);
+        return false;
+      }
+    }
+  dir_close(dir);
+  inode_close(inode);
+  if (!token)
+    return true;
+  return false;
 }
