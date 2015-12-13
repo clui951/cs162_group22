@@ -174,8 +174,10 @@ process_exit (void)
   if (cur->executable != NULL)
     file_close(cur->executable);
   int i;
-  for (i = 0; i < 128; i++)
+  for (i = 2; i < 128; i++) {
+    // printf("or here\n");
     file_close(cur->file_des[i]);
+  }
   sema_up(&(cur->child->child_sema));
 }
 

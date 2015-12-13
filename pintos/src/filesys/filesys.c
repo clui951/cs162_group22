@@ -13,7 +13,7 @@
 struct block *fs_device;
 
 static void do_format (void);
-struct dir* get_dir (const char *path, bool to_remove);
+struct dir* get_dir (const char *path, bool to_remove, bool chdir);
 char* get_filename (const char *path);
 bool path_is_dir (const char *path);
 
@@ -54,7 +54,9 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
 {
   // printf("in filesys create, before everything, is_dir %d\n", is_dir);
   block_sector_t inode_sector = 0;
-  struct dir *dir = get_dir (name, false);
+  struct dir *dir = get_dir (name, true, false);
+  // if (!is_dir)
+  // dir = get_dir (name, true, false);
   char *file_name = get_filename(name);
   bool success = (dir != NULL
               && free_map_allocate (1, &inode_sector));
@@ -88,9 +90,9 @@ struct file *
 filesys_open (const char *name)
 {
   // printf("start: in filesys open name: %s\n", name);
-  struct dir *dir = get_dir (name, false);
+  struct dir *dir = get_dir (name, false, false);
   if (!strcmp(name, "/") || path_is_dir(name)) {
-    // printf("returning dir\n");
+    // printf("path is dir, opening dir %s\n", name);
     return dir;
   }
   char *file_name = "";
@@ -108,7 +110,6 @@ filesys_open (const char *name)
   if (!inode) {
     return NULL;
   }
-  // printf("file?\n");
   return file_open(inode);
 }
 
@@ -122,19 +123,28 @@ filesys_remove (const char *name)
   struct dir *dir;
   struct thread *current = thread_current();
   if (current->cwd) {
-    dir = get_dir (name, false);
+    dir = get_dir (name, false, false);
     if (inode_get_inumber(dir_get_inode(current->cwd)) == inode_get_inumber(dir_get_inode(dir))) {
+      // printf("not removing dir\n");
       dir_close(dir);
       return false;
     }
+    else if (inode_still_open(dir_get_inode(dir)))
+      return false;
   }
-  dir = get_dir (name, true);
+  dir = get_dir (name, true, false);
   char *file_name = get_filename(name);
-  // if (path_is_dir(name))
-  //   file_name = ".";
+  // if (path_is_dir(name)) {
+  //   // dir_close(dir);
+  //   dir = dir_get_parent(dir);
+  // }
   // printf("%s\n", file_name);
   bool success = dir != NULL && dir_remove (dir, file_name);
-  dir_close (dir);
+  if (path_is_dir(name))
+    dir_close (dir);
+  else
+    file_close(dir);
+  // if (!dir) printf("hi\n");
   // if (!path_is_dir(name))
   free(file_name);
   // printf("fail? %d\n", success);
@@ -147,10 +157,11 @@ bool
 filesys_chdir (const char *name)
 {
   // printf("start of filesys chdir, name: %s\n", name);
-  struct dir *dir = get_dir (name, false);
+  struct dir *dir = get_dir (name, false, true);
   if (!dir)
     return false;
   struct thread *current = thread_current();
+  // printf("get here\n");
   dir_close(current->cwd);
   current->cwd = dir;
   return true;
@@ -188,7 +199,7 @@ do_format (void)
 }
 
 struct dir*
-get_dir (const char *path, bool to_remove)
+get_dir (const char *path, bool to_remove, bool chdir)
 {
   if (!strcmp(path, "/")) {
     return dir_open_root ();
@@ -200,11 +211,13 @@ get_dir (const char *path, bool to_remove)
   char path_copy[strlen(path) + 1];
   memcpy(path_copy, path, strlen(path) + 1);
   char *saveptr, *token, *next_token;
-
-  if (!strcmp(&path_copy[0], "/") || !current->cwd) {
+  // printf("first char is / %s %s\n", strcmp(*path_copy, '/'), *path_copy);
+  if (*path_copy == '/' || !current->cwd) {
+    // printf("opening root\n");
     dir = dir_open_root ();
   }
   else {
+    // printf("opening cwd\n");
     dir = dir_reopen (current->cwd);
   }
 
@@ -224,6 +237,8 @@ get_dir (const char *path, bool to_remove)
             {
               dir_close (dir);
               dir = dir_open (inode);
+              // printf("opening %s\n", token);
+              // if (!next_token) printf("returning this dir\n");
             }
           else {
             inode_close(inode);
@@ -231,7 +246,14 @@ get_dir (const char *path, bool to_remove)
           }
         }
       else {
-        inode_close(inode);
+        // dir_close(dir);
+        // dir = NULL;
+        if (chdir)
+          {
+            dir_close(dir);
+            return NULL;
+          }
+        // inode_close(inode);
         break;
       }
     }
@@ -281,7 +303,7 @@ path_is_dir (const char *path)
   memcpy(path_copy, path, strlen(path) + 1);
   char *saveptr, *token;
 
-  if (!strcmp(&path_copy[0], "/") || !current->cwd) {
+  if (*path_copy == '/' || !current->cwd) {
     dir = dir_open_root ();
   }
   else {
@@ -302,7 +324,7 @@ path_is_dir (const char *path)
             }
           else {
             inode_close(inode);
-            dir_close(dir);
+            inode_close(dir);
             return false;
           }
         }

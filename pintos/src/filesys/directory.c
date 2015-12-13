@@ -117,7 +117,7 @@ lookup (const struct dir *dir, const char *name,
     // printf("ename %s name %s %d\n", e.name, name, e.in_use);
     if (e.in_use && !strcmp (name, e.name))
       {
-        // printf("but why\n");
+        // printf("found e.name %s and in use\n", e.name);
         if (ep != NULL)
           *ep = e;
         if (ofsp != NULL)
@@ -126,6 +126,7 @@ lookup (const struct dir *dir, const char *name,
         return true;
       }
     }
+  // printf("returning false\n");
   return false;
 }
 
@@ -146,8 +147,9 @@ dir_lookup (const struct dir *dir, const char *name,
   // printf("in dir_lookup, about to do lookup\n");
   if (lookup (dir, name, &e, NULL))
     *inode = inode_open (e.inode_sector);
-  else
+  else {
     *inode = NULL;
+  }
   // inode_lock_release(dir_get_inode(dir));
   return *inode != NULL;
 }
@@ -250,7 +252,7 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
   // printf("hi\n");
   while (inode_read_at (dir->inode, &e, sizeof e, dir->pos) == sizeof e)
     {
-      printf("%s\n", e.name);
+      // printf("%s\n", e.name);
       dir->pos += sizeof e;
       if (e.in_use)
         {
@@ -277,5 +279,5 @@ dir_get_parent (struct dir *dir)
   //   printf("wow my parent is root!\n");
   // dir_close(root);
   // return dir_open(inode);
-  return inode_get_parent(dir_get_inode(dir));
+  return dir_open(inode_get_parent(dir_get_inode(dir)));
 }

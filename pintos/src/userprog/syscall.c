@@ -381,6 +381,7 @@ write (int fd, const void *buffer, unsigned length)
 			if (is_dir)
 				{
 					// lock_release(&file_lock);
+					// printf("doesnt write to dir\n");
 					return -1;
 				}
 			int write = file_write(file, buffer, length);
@@ -450,10 +451,14 @@ close (int fd)
 			return -1;
 		}
 	bool is_dir = inode_is_dir(inode);
-	if (is_dir)
+	if (is_dir) {
+		// printf("dir close\n");
 		dir_close((struct dir *) inode);
-	else
+	}
+	else {
+		// printf("file close\n");
 		file_close(file);
+	}
 	current->file_des[fd] = 0;
 	// lock_release(&file_lock);
 }
@@ -491,7 +496,7 @@ readdir (int fd, char name[READDIR_MAX_LEN + 1])
 		}
 	if (!inode_is_dir(file_get_inode(file)))
 		return false;
-	if (dir_readdir((struct dir *)file, name))
+	if (dir_readdir((struct dir *)file, name) && !strcmp(name, "."), !strcmp(name, ".."))
 		return true;
 	return false;
 }
