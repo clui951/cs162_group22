@@ -246,6 +246,7 @@ remove (const char *file)
 int
 open (const char *file)
 {
+	// printf("in open\n");
 	if (!file)
 		exit(-1);
 	struct file *new_file = filesys_open(file);
