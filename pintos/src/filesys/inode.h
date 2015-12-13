@@ -26,10 +26,5 @@ void inode_lock_release (struct inode *inode);
 block_sector_t inode_get_parent (struct inode *inode);
 bool inode_add_parent (block_sector_t child_sector, block_sector_t parent_sector);
 bool inode_still_open (struct inode *inode);
-// void inode_allocate ();
-// void inode_deallocate ();
-// void inode_expand (struct inode *inode, off_t length);
-// void inode_expand_indirect (struct inode *inode);
-// void inode_expand_doubly_indirect (struct inode *inode);
 
 #endif /* filesys/inode.h */

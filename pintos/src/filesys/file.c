@@ -47,7 +47,6 @@ file_close (struct file *file)
 {
   if (file != NULL)
     {
-      // printf("hi\n");
       if (!inode_is_dir (file->inode))
         file_allow_write (file);
       inode_close (file->inode);

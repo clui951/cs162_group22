@@ -127,7 +127,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 					f->eax = practice(args[1]);
 					break;
 				}
-			case SYS_CHDIR: // Change the current directory.
+			case SYS_CHDIR:
 				{
 					check_valid_pointer((const void *)args[1]);
 					args[1] = (int)pagedir_get_page(thread_current()->pagedir,
@@ -135,7 +135,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 					f->eax = chdir((const char *)args[1]);
 					break;
 				}
-			case SYS_MKDIR: // Create a directory.
+			case SYS_MKDIR:
 				{
 					check_valid_pointer((const void *)args[1]);
 					args[1] = (int)pagedir_get_page(thread_current()->pagedir,
@@ -143,7 +143,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 					f->eax = mkdir((const char *)args[1]);
 					break;
 				}
-			case SYS_READDIR: // Reads a directory entry.
+			case SYS_READDIR:
 				{
 					check_valid_pointer((const void *)args[2]);
 					args[2] = (int)pagedir_get_page(thread_current()->pagedir,
@@ -151,24 +151,16 @@ syscall_handler (struct intr_frame *f UNUSED)
 					f->eax = readdir(args[1], (const char *)args[2]);
 					break;
 				}
-			case SYS_ISDIR: // Tests if a fd represents a directory.
+			case SYS_ISDIR:
 				{
 					f->eax = isdir(args[1]);
 					break;
 				}
-			case SYS_INUMBER: // Returns the inode number for a fd.
+			case SYS_INUMBER:
 				{
 					f->eax = inumber(args[1]);
 					break;
 				}
-			// case SYS_HITRATE:
-			// 	{
-
-			// 	}
-			// case SYS_COALESCE:
-			// 	{
-
-			// 	}
 		}
 }
 
@@ -192,10 +184,8 @@ exit (int status)
 	if (status < -1)
 		status = -1;
 	struct thread *current = thread_current();
-	// lock_acquire(&file_lock);
 	if (current->child)
 		current->child->exit_status = status;
-	// lock_release(&file_lock);
 	printf("%s: exit(%d)\n", current->name, status);
 	thread_exit();
 }
@@ -205,7 +195,6 @@ exec (const char *file)
 {
 	if (!file)
 		return -1;
-	// lock_acquire(&file_lock);
 	char *state;
 	char *fn_copy;
 	fn_copy = palloc_get_page (0);
@@ -218,13 +207,11 @@ exec (const char *file)
 		{
 			palloc_free_page (fn_copy);
 			file_close(open_file);
-			// lock_release(&file_lock);
 		  return -1;
 		}
 	palloc_free_page (fn_copy);
 	file_close(open_file);
 	int pid = process_execute(file);
-	// lock_release(&file_lock);
 	return pid;
 }
 
@@ -241,9 +228,7 @@ create (const char *file, unsigned initial_size)
 {
 	if (!file)
 		exit(-1);
-	// lock_acquire(&file_lock);
 	bool success = filesys_create(file, initial_size, false);
-	// lock_release(&file_lock);
 	return success;
 }
 
@@ -254,43 +239,30 @@ remove (const char *file)
 		exit(-1);
 	if (strcmp(file, "/") == 0)
 		return false;
-	// lock_acquire(&file_lock);
 	bool success = filesys_remove(file);
-	// lock_release(&file_lock);
 	return success;
 }
 
 int
 open (const char *file)
 {
-	// printf("hi\n");
 	if (!file)
 		exit(-1);
-	// lock_acquire(&file_lock);
-	// printf("hi2\n");
 	struct file *new_file = filesys_open(file);
-	// printf("hi3\n");
 	if (!new_file)
 		{
-			// lock_release(&file_lock);
-			// printf("lolwa\n");
 			return -1;
 		}
 	struct thread *current = thread_current();
 	int i;
-	// printf("hi4\n");
 	for (i = 2; i < 128; i++)
 		{
 			if (!current->file_des[i])
 				{
-					// printf("%d\n", i);
 					current->file_des[i] = new_file;
-					// lock_release(&file_lock);
 					return i;
 				}
 		}
-	// lock_release(&file_lock);
-	// printf("hi5\n");
 	return -1;
 }
 
@@ -299,15 +271,12 @@ filesize (int fd)
 {
 	if (fd < 128 && fd >1)
 		{
-			// lock_acquire(&file_lock);
 			struct file *file = thread_current()->file_des[fd];
 			if (!file)
 				{
-					// lock_release(&file_lock);
 					return -1;
 				}
 			int filesize = file_length(file);
-			// lock_release(&file_lock);
 			return filesize;
 		}
 	else
@@ -323,28 +292,23 @@ read (int fd, void *buffer, unsigned length)
 		return length;
 	else if (fd > STDOUT_FILENO && fd < 128)
 		{
-			// lock_acquire(&file_lock);
 			struct thread *current = thread_current();
 			struct file *file = current->file_des[fd];
 			if (!file)
 				{
-					// lock_release(&file_lock);
 					return -1;
 				}
 			struct inode *inode = file_get_inode (file);
 			if (!inode)
 				{
-					// lock_release(&file_lock);
 					return -1;
 				}
 			bool is_dir = inode_is_dir(inode);
 			if (is_dir)
 				{
-					// lock_release(&file_lock);
 					return -1;
 				}
 			int read = file_read(file, buffer, length);
-			// lock_release(&file_lock);
 			return read;
 		}
 	else
@@ -363,29 +327,23 @@ write (int fd, const void *buffer, unsigned length)
 		}
 	else if (fd > STDOUT_FILENO && fd < 128)
 		{
-			// lock_acquire(&file_lock);
 			struct thread *current = thread_current();
 			struct file *file = current->file_des[fd];
 			if (!file)
 				{
-					// lock_release(&file_lock);
 					return -1;
 				}
 			struct inode *inode = file_get_inode (file);
 			if (!inode)
 				{
-					// lock_release(&file_lock);
 					return -1;
 				}
 			bool is_dir = inode_is_dir(inode);
 			if (is_dir)
 				{
-					// lock_release(&file_lock);
-					// printf("doesnt write to dir\n");
 					return -1;
 				}
 			int write = file_write(file, buffer, length);
-			// lock_release(&file_lock);
 			return write;
 		}
 	else
@@ -397,15 +355,12 @@ seek (int fd, unsigned position)
 {
 	if (fd < 128 && fd > 1)
 		{
-			// lock_acquire(&file_lock);
 			struct file *file = thread_current()->file_des[fd];
 			if (!file)
 				{
-					// lock_release(&file_lock);
 					exit(-1);
 				}
 			file_seek(file, position);
-			// lock_release(&file_lock);
 		}
 	else
 		exit(-1);
@@ -416,15 +371,12 @@ tell (int fd)
 {
 	if (fd < 128 && fd > 1)
 		{
-			// lock_acquire(&file_lock);
 			struct file *file = thread_current()->file_des[fd];
 			if (!file)
 				{
-					// lock_release(&file_lock);
 					return -1;
 				}
 			int file_pos = file_tell(file);
-			// lock_release(&file_lock);
 			return file_pos;
 		}
 	else
@@ -436,31 +388,25 @@ close (int fd)
 {
 	if (fd < 2 || fd > 127)
 		exit(-1);
-	// lock_acquire(&file_lock);
 	struct thread *current = thread_current();
 	struct file *file = current->file_des[fd];
 	if (!file)
 		{
-			// lock_release(&file_lock);
 			exit(-1);
 		}
 	struct inode *inode = file_get_inode (file);
 	if (!inode)
 		{
-			// lock_release(&file_lock);
 			return -1;
 		}
 	bool is_dir = inode_is_dir(inode);
 	if (is_dir) {
-		// printf("dir close\n");
 		dir_close((struct dir *) inode);
 	}
 	else {
-		// printf("file close\n");
 		file_close(file);
 	}
 	current->file_des[fd] = 0;
-	// lock_release(&file_lock);
 }
 
 int
@@ -486,12 +432,10 @@ readdir (int fd, char name[READDIR_MAX_LEN + 1])
 {
 	if (fd < 2 || fd > 127)
 		exit(-1);
-	// lock_acquire(&file_lock);
 	struct thread *current = thread_current();
 	struct file *file = current->file_des[fd];
 	if (!file)
 		{
-			// lock_release(&file_lock);
 			return false;
 		}
 	if (!inode_is_dir(file_get_inode(file)))
@@ -506,22 +450,18 @@ isdir (int fd)
 {
 	if (fd < 2 || fd > 127)
 		exit(-1);
-	// lock_acquire(&file_lock);
 	struct thread *current = thread_current();
 	struct file *file = current->file_des[fd];
 	if (!file)
 		{
-			// lock_release(&file_lock);
 			return false;
 		}
 	struct inode *inode = file_get_inode (file);
 	if (!inode)
 		{
-			// lock_release(&file_lock);
 			return false;
 		}
 	bool is_dir = inode_is_dir(inode);
-	// lock_release(&file_lock);
 	return is_dir;
 }
 
@@ -537,24 +477,10 @@ inumber (int fd)
 					lock_release(&file_lock);
 					return -1;
 				}
-			// printf("before\n");
 			block_sector_t inumber = inode_get_inumber(file_get_inode (file));
 			lock_release(&file_lock);
-			// printf("%d\n", inumber);
 			return inumber;
 		}
 	else
 		return -1;
 }
-
-// bool
-// hitrate (void)
-// {
-// 	cache_init();
-// }
-
-// bool
-// coalesce_write (void)
-// {
-
-// }
