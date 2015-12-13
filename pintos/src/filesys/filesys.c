@@ -140,8 +140,9 @@ bool
 filesys_chdir (const char *name)
 {
   struct dir *dir = get_dir (name, false, true);
-  if (!dir)
+  if (!dir) {
     return false;
+  }
   struct thread *current = thread_current();
   dir_close(current->cwd);
   current->cwd = dir;
@@ -189,7 +190,7 @@ get_dir (const char *path, bool to_remove, bool chdir)
       if (dir_lookup (dir, token, &inode))
         {
           if (to_remove && next_token == NULL) {
-            inode_close(inode);
+            // inode_close(inode);
             break;
           }
           else if (inode_is_dir(inode))

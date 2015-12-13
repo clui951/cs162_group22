@@ -289,9 +289,11 @@ inode_close (struct inode *inode)
       /* Deallocate blocks if removed. */
       if (inode->removed)
         {
+          free_map_release (inode->sector, 1);
           int i;
           bool indirect, double_indirect;
           size_t sectors = bytes_to_sectors(inode->data.length);
+          printf("sectors %d\n", sectors);
           for (i = 0; i < sectors; i++) {
             if (i < DIR_PTRS) {
               free_map_release(inode->data.direct[i], 1);
@@ -302,6 +304,7 @@ inode_close (struct inode *inode)
               free_map_release(pointers->pointers[index->index], 1);
               indirect = true;
             } else {
+              printf("third\n");
               struct cache_entry *doubly_indirect_entry = cache_get_entry(inode->sector);
               struct block_of_pointers *pointers = (struct block_of_pointers *) doubly_indirect_entry->data;
               struct inode_index *index = inode_index(i * 4);
@@ -311,6 +314,7 @@ inode_close (struct inode *inode)
               double_indirect = true;
             }
           }
+          printf("hmm\n");
           if (indirect)
             free_map_release(inode->data.indirect, 1);
           if (double_indirect) {
@@ -321,7 +325,7 @@ inode_close (struct inode *inode)
               free_map_release(pointers->pointers[i], 1);
             free_map_release(inode->data.doubly_indirect, 1);
           }
-          free_map_release (inode->sector, 1);
+
         }
       free (inode);
     }
