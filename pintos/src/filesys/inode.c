@@ -182,9 +182,9 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
         for (j = 0; j < sectors - DIR_PTRS && j < 128; j++) {
           free_map_allocate(1, &inode_sector);
           pointers->pointers[j] = inode_sector;
-          i++;
+          // i++;
         }
-        i--;
+        // i--;
         indirect_entry->dirty = true;
       } else { // we should handle when the sectors don't fit in an inode, but whatever
         free_map_allocate(1, &inode_sector);
@@ -193,9 +193,9 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
         struct block_of_pointers *pointers = (struct block_of_pointers *) indirect_entry->data;
         int j;
         int k;
-        for (j = 0; j < sectors - (DIR_PTRS + 128); j += k) {
+        for (j = 0; j < sectors - (DIR_PTRS + 128); j += 128) {
           free_map_allocate(1, &inode_sector);
-          pointers->pointers[j] = inode_sector;
+          pointers->pointers[j / 128] = inode_sector;
           struct cache_entry *doubly_indirect_entry = cache_get_entry(inode_sector);
           struct block_of_pointers *double_pointers = (struct block_of_pointers *) doubly_indirect_entry->data;
           for (k = 0; k < 128 && k < sectors - (DIR_PTRS + 128*(k + 1)); k++) {
@@ -287,25 +287,43 @@ inode_close (struct inode *inode)
       list_remove (&inode->elem);
 
       /* Deallocate blocks if removed. */
-      // if (inode->removed)
-      //   {
-      //     int i;
-      //     size_t sectors = bytes_to_sectors(inode->data.length);
-      //     for (i = 0; i < sectors; i++) {
-      //       if (i < DIR_PTRS) {
-      //         free_map_release(inode->data.direct[i], 1);
-      //       } else if (i < DIR_PTRS + 128) {
-      //         struct cache_entry *indirect_entry = cache_get_entry(inode->sector);
-      //         struct block_of_pointers *pointers = (struct block_of_pointers *) indirect_entry->data;
-      //         free_map_release(pointers->pointers[i - 128], 1);
-      //       } else {
-      //         struct cache_entry *doubly_indirect_entry = cache_get_entry(inode->sector);
-
-      //       }
-      //     }
-      //     free_map_release (inode->sector, 1);
-      //   }
-      // free (inode);
+      if (inode->removed)
+        {
+          int i;
+          bool indirect, double_indirect;
+          size_t sectors = bytes_to_sectors(inode->data.length);
+          for (i = 0; i < sectors; i++) {
+            if (i < DIR_PTRS) {
+              free_map_release(inode->data.direct[i], 1);
+            } else if (i < DIR_PTRS + 128) {
+              struct cache_entry *indirect_entry = cache_get_entry(inode->sector);
+              struct block_of_pointers *pointers = (struct block_of_pointers *) indirect_entry->data;
+              struct inode_index *index = inode_index(i * 4);
+              free_map_release(pointers->pointers[index->index], 1);
+              indirect = true;
+            } else {
+              struct cache_entry *doubly_indirect_entry = cache_get_entry(inode->sector);
+              struct block_of_pointers *pointers = (struct block_of_pointers *) doubly_indirect_entry->data;
+              struct inode_index *index = inode_index(i * 4);
+              struct cache_entry *final_entry = cache_get_entry(pointers->pointers[index->double_index]);
+              struct block_of_pointers *final_pointers = (struct block_of_pointers *) final_entry->data;
+              free_map_release(final_pointers->pointers[index->index], 1);
+              double_indirect = true;
+            }
+          }
+          if (indirect)
+            free_map_release(inode->data.indirect, 1);
+          if (double_indirect) {
+            int num_indirect = (sectors - DIR_PTRS - 128) / 128;
+            struct cache_entry *doubly_indirect_entry = cache_get_entry(inode->sector);
+            struct block_of_pointers *pointers = (struct block_of_pointers *) doubly_indirect_entry->data;
+            for (i = 0; i <= num_indirect; i++)
+              free_map_release(pointers->pointers[i], 1);
+            free_map_release(inode->data.doubly_indirect, 1);
+          }
+          free_map_release (inode->sector, 1);
+        }
+      free (inode);
     }
 }
 
@@ -368,37 +386,16 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
   if (inode->deny_write_cnt)
     return 0;
-  // while (size > 0)
-  //   {
-  //     /* Sector to write, starting byte offset within sector. */
-  //     block_sector_t sector_idx = byte_to_sector (inode, offset);
-  //     int sector_ofs = offset % BLOCK_SECTOR_SIZE;
-
-  //     /* Bytes left in inode, bytes left in sector, lesser of the two. */
-  //     off_t inode_left = inode_length (inode) - offset;
-  //     int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
-  //     int min_left = inode_left < sector_left ? inode_left : sector_left;
-
-  //     /* Number of bytes to actually write into this sector. */
-  //     int chunk_size = size < min_left ? size : min_left;
-  //     if (chunk_size <= 0)
-  //       break;
-
-  //     struct cache_entry *entry = cache_get_entry (sector_idx);
-  //     memcpy((uint8_t *) &entry->data + sector_ofs, buffer + bytes_written, chunk_size);
-  //     entry->dirty = true;
-
-  //     /* Advance. */
-  //     size -= chunk_size;
-  //     offset += chunk_size;
-  //     bytes_written += chunk_size;
-  //   }
   if (inode->data.length < offset+size) {
     int i;
-    int sectors = bytes_to_sectors(offset+size);
-    struct inode_disk *disk_inode = &(inode->data);
+    int sectors = bytes_to_sectors (offset + size);
+    struct inode_disk *disk_inode = &inode->data;
     block_sector_t inode_sector;
-    for (i = (disk_inode->length%BLOCK_SECTOR_SIZE==0 ? disk_inode->length :disk_inode->length/BLOCK_SECTOR_SIZE+1); i < sectors; i++) {
+    if (disk_inode->length % BLOCK_SECTOR_SIZE == 0)
+      i = disk_inode->length;
+    else
+      i = disk_inode->length / BLOCK_SECTOR_SIZE + 1;
+    for (; i < sectors; i++) {
       if (i < DIR_PTRS) {
           free_map_allocate(1, &inode_sector);
           disk_inode->direct[i] = inode_sector;
@@ -406,38 +403,31 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       else if (i < DIR_PTRS + 128) {
         free_map_allocate(1, &inode_sector);
         disk_inode->indirect = inode_sector;
-        struct block_of_pointers *pointers;
         struct cache_entry *entry = cache_get_entry(inode_sector);
-        pointers = (struct block_of_pointers *) entry->data;
+        struct block_of_pointers *pointers = (struct block_of_pointers *) entry->data;
         int j;
-        for (j = 0; j < sectors - DIR_PTRS -i && j < 128; j++) {
+        for (j = 0; j < sectors - DIR_PTRS && j < 128; j++) {
           free_map_allocate(1, &inode_sector);
           pointers->pointers[j] = inode_sector;
-          i++;
         }
-        i--; // because the for loop will increment once for us
         entry->dirty = true;
       } else { // we should handle when the sectors don't fit in an inode, but whatever
         free_map_allocate(1, &inode_sector);
-        disk_inode->indirect = inode_sector;
-        struct block_of_pointers *pointers;
-        struct cache_entry *entry = cache_get_entry(inode_sector);
-        pointers = (struct block_of_pointers *) entry->data;
-        int j;
-        for (j = 0; j < sectors - DIR_PTRS - i; j++) {
-            pointers->pointers[j] = inode_sector;
-            struct block_of_pointers *pointers2;
-            struct cache_entry *entry2 = cache_get_entry(inode_sector);
-            pointers2 = (struct block_of_pointers *) entry2->data;
-            int k;
-            for (k = 0; k < sectors - DIR_PTRS -i && j < 128; k++) {
+        disk_inode->doubly_indirect = inode_sector;
+        struct cache_entry *indirect_entry = cache_get_entry(inode_sector);
+        struct block_of_pointers *pointers = (struct block_of_pointers *) indirect_entry->data;
+        int j, k;
+        for (j = 0; j < sectors - (DIR_PTRS + 128); j += 128) {
+            pointers->pointers[j / 128] = inode_sector;
+            struct cache_entry *doubly_indirect_entry = cache_get_entry(inode_sector);
+            struct block_of_pointers *double_pointers = (struct block_of_pointers *) doubly_indirect_entry->data;
+            for (k = 0; k < 128 && k < sectors - (DIR_PTRS + 128 * (k + 1)); k++) {
               free_map_allocate(1, &inode_sector);
-              pointers2->pointers[j] = inode_sector;
-              i++;
+              double_pointers->pointers[k] = inode_sector;
             }
-            entry2->dirty = true;
+            doubly_indirect_entry->dirty = true;
         }
-        entry->dirty = true;
+        indirect_entry->dirty = true;
       }
     }
     disk_inode->length = offset+size;
@@ -445,6 +435,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     memcpy(entry->data, disk_inode, 512);
     entry->dirty = true;
   }
+
   while (size > 0)
     {
       /* Sector to write, starting byte offset within sector. */
