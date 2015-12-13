@@ -161,6 +161,24 @@ syscall_handler (struct intr_frame *f UNUSED)
 					f->eax = inumber(args[1]);
 					break;
 				}
+			case SYS_HITRATE:
+				{
+					check_valid_pointer((const void *)args[2]);
+					check_valid_pointer((const void *)args[2] + args[3]);
+					args[2] = (int)pagedir_get_page(thread_current()->pagedir,
+													(const void *)args[2]);
+					f->eax = write(args[1], (void *)args[2], args[3]);
+					break;
+				}
+			case SYS_COALESCE:
+				{
+					check_valid_pointer((const void *)args[2]);
+					check_valid_pointer((const void *)args[2] + args[3]);
+					args[2] = (int)pagedir_get_page(thread_current()->pagedir,
+													(const void *)args[2]);
+					f->eax = write(args[1], (void *)args[2], args[3]);
+					break;
+				}
 		}
 }
 
@@ -440,8 +458,9 @@ readdir (int fd, char name[READDIR_MAX_LEN + 1])
 		}
 	if (!inode_is_dir(file_get_inode(file)))
 		return false;
-	if (dir_readdir((struct dir *)file, name) && !strcmp(name, "."), !strcmp(name, ".."))
+	if (dir_readdir((struct dir *)file, name) && (!strcmp(name, ".") || !strcmp(name, ".."))) {
 		return true;
+	}
 	return false;
 }
 
@@ -483,4 +502,72 @@ inumber (int fd)
 		}
 	else
 		return -1;
+}
+
+unsigned long long
+hitrate (int fd, void *buffer, unsigned length)
+{
+	if (fd > STDOUT_FILENO && fd < 128)
+		{
+			struct thread *current = thread_current();
+			struct file *file = current->file_des[fd];
+			if (!file)
+				{
+					return -1;
+				}
+			struct inode *inode = file_get_inode (file);
+			if (!inode)
+				{
+					return -1;
+				}
+			bool is_dir = inode_is_dir(inode);
+			if (is_dir)
+				{
+					return -1;
+				}
+			cache_flush_all ();
+			unsigned long long initial = block_get_read_cnt (fs_device) + block_get_write_cnt (fs_device);
+			file_read(file, buffer, length);
+			unsigned long long first = block_get_read_cnt (fs_device) + block_get_write_cnt (fs_device) - initial;
+			file_read(file, buffer, length);
+			unsigned long long second = block_get_read_cnt (fs_device) + block_get_write_cnt (fs_device) - first;
+			return first-second;
+		}
+	else
+		{
+			return -1;
+		}
+}
+
+bool
+coalesce (int fd, void *buffer, unsigned length)
+{
+	if (fd > STDOUT_FILENO && fd < 128)
+		{
+			struct thread *current = thread_current();
+			struct file *file = current->file_des[fd];
+			if (!file)
+				{
+					return -1;
+				}
+			struct inode *inode = file_get_inode (file);
+			if (!inode)
+				{
+					return -1;
+				}
+			bool is_dir = inode_is_dir(inode);
+			if (is_dir)
+				{
+					return -1;
+				}
+			cache_flush_all ();
+			file_write(file, buffer, length);
+			file_read(file, buffer, length);
+			unsigned long long writes = block_get_write_cnt (fs_device);
+			return writes % 4 == 0;
+		}
+	else
+		{
+			return false;
+		}
 }

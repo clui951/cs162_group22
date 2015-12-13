@@ -23,27 +23,28 @@ struct inode_index *inode_index (off_t pos);
    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
 struct inode_disk
   {
-    // block_sector_t start;               /* First data sector. */
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */
     bool is_dir;                        /* True if directory. */
-    block_sector_t direct[DIR_PTRS];
-    block_sector_t indirect;
-    block_sector_t doubly_indirect;
-    block_sector_t parent;
+    block_sector_t direct[DIR_PTRS];    /* Stores the direct pointers. */
+    block_sector_t indirect;            /* Stores the pointer to the indirect block. */
+    block_sector_t doubly_indirect;     /* Stores the pointer to the doubly indirect blocks. */
+    block_sector_t parent;              /* Stores the pointer to the parent of the current inode. */
   };
 
+/* Index for a particular block on the inode_disk. */
 struct inode_index
   {
-    int indirection;
-    off_t index;
-    off_t double_index;
-    bool valid;
+    int indirection;                    /* The level of indirection. */
+    off_t index;                        /* Index for the final block of pointers. */
+    off_t double_index;                 /* Index for the middle block for doubly indirect pointers. */
+    bool valid;                         /* Validity of the inode index. */
   };
 
+/* Stores a block of pointeres. */
 struct block_of_pointers
   {
-    block_sector_t pointers[128];
+    block_sector_t pointers[128];       /* Stores a block of 128 pointers. */
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -94,10 +95,10 @@ byte_to_sector (const struct inode *inode, off_t pos)
     }
     free(index);
   }
-  // printf("index_num %d\n", index_num);
   return index_num;
 }
 
+/* Returns the inode index of the offset. */
 struct inode_index *
 inode_index (off_t pos)
 {
@@ -123,8 +124,6 @@ inode_index (off_t pos)
   }
   return inode_index;
 }
-
-struct lock inode_lock;
 
 /* List of open inodes, so that opening a single inode twice
    returns the same `struct inode'. */
@@ -182,11 +181,9 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
         for (j = 0; j < sectors - DIR_PTRS && j < 128; j++) {
           free_map_allocate(1, &inode_sector);
           pointers->pointers[j] = inode_sector;
-          // i++;
         }
-        // i--;
         indirect_entry->dirty = true;
-      } else { // we should handle when the sectors don't fit in an inode, but whatever
+      } else {
         free_map_allocate(1, &inode_sector);
         disk_inode->doubly_indirect = inode_sector;
         struct cache_entry *indirect_entry = cache_get_entry(inode_sector);
@@ -293,7 +290,6 @@ inode_close (struct inode *inode)
           int i;
           bool indirect, double_indirect;
           size_t sectors = bytes_to_sectors(inode->data.length);
-          printf("sectors %d\n", sectors);
           for (i = 0; i < sectors; i++) {
             if (i < DIR_PTRS) {
               free_map_release(inode->data.direct[i], 1);
@@ -304,7 +300,6 @@ inode_close (struct inode *inode)
               free_map_release(pointers->pointers[index->index], 1);
               indirect = true;
             } else {
-              printf("third\n");
               struct cache_entry *doubly_indirect_entry = cache_get_entry(inode->sector);
               struct block_of_pointers *pointers = (struct block_of_pointers *) doubly_indirect_entry->data;
               struct inode_index *index = inode_index(i * 4);
@@ -314,7 +309,6 @@ inode_close (struct inode *inode)
               double_indirect = true;
             }
           }
-          printf("hmm\n");
           if (indirect)
             free_map_release(inode->data.indirect, 1);
           if (double_indirect) {
@@ -415,7 +409,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
           pointers->pointers[j] = inode_sector;
         }
         entry->dirty = true;
-      } else { // we should handle when the sectors don't fit in an inode, but whatever
+      } else {
         free_map_allocate(1, &inode_sector);
         disk_inode->doubly_indirect = inode_sector;
         struct cache_entry *indirect_entry = cache_get_entry(inode_sector);
@@ -496,30 +490,21 @@ inode_length (const struct inode *inode)
   return inode->data.length;
 }
 
+/* Returns whether an inode is a directory. */
 bool
 inode_is_dir (struct inode *inode)
 {
   return inode->data.is_dir;
 }
 
-void
-inode_lock_acquire (struct inode *inode)
-{
-  lock_acquire(&inode->inode_lock);
-}
-
-void
-inode_lock_release (struct inode *inode)
-{
-  lock_release(&inode->inode_lock);
-}
-
+/* Gets the inode's parent's sector. */
 block_sector_t
 inode_get_parent (struct inode *inode)
 {
   return inode->data.parent;
 }
 
+/* Adds the inode's parent sector to its inode struct. */
 bool
 inode_add_parent (block_sector_t child_sector, block_sector_t parent_sector)
 {
@@ -531,6 +516,7 @@ inode_add_parent (block_sector_t child_sector, block_sector_t parent_sector)
   return true;
 }
 
+/* Checks whether the inode is still open. */
 bool
 inode_still_open (struct inode *inode)
 {

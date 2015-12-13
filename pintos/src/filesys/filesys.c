@@ -60,7 +60,7 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
   if (is_dir)
     {
       block_sector_t parent_sector = inode_get_inumber(dir_get_inode(dir));
-      success = success && dir_create (parent_sector, inode_sector, initial_size); // TODO: change 16 to initial_size when extensible files are done
+      success = success && dir_create (parent_sector, inode_sector, initial_size);
     }
   else
     {
@@ -161,6 +161,7 @@ do_format (void)
   printf ("done.\n");
 }
 
+/* Gets the directory of the path. */
 struct dir*
 get_dir (const char *path, bool to_remove, bool chdir)
 {
@@ -190,7 +191,6 @@ get_dir (const char *path, bool to_remove, bool chdir)
       if (dir_lookup (dir, token, &inode))
         {
           if (to_remove && next_token == NULL) {
-            // inode_close(inode);
             break;
           }
           else if (inode_is_dir(inode))
@@ -215,6 +215,7 @@ get_dir (const char *path, bool to_remove, bool chdir)
   return dir;
 }
 
+/* Gets the file name or directory name of a path. */
 char*
 get_filename (const char *path)
 {
@@ -243,6 +244,7 @@ get_filename (const char *path)
   return file_name;
 }
 
+/* Checks whether path is a directory. */
 bool
 path_is_dir (const char *path)
 {

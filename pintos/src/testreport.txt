@@ -1,0 +1,155 @@
+Proj 4 Group 22 Cache Test Report
+
+Test 1
+This test is supposed to test the feature of our cache to make sure that it does
+a good job of containing and not evicting the values that were recently accessed.
+We want to see our cache exhibit a LRU/Clock policy behavior in terms of replacing
+values. If the test passes, it means that the cache did indeed retain values that
+were recently accessed, and that our hit rate was improved through the cache.
+
+Because we know that every time a syscall is made to read or write a certain block
+on disk, the block struct will increment the counter for each action. Therefore,
+we take advantage of this behaviour by checking these values after reading a file
+with a cold cache, and reading the exact same file again without flushing anything
+from our cache. We added a syscall called hitrate, which takes in a file descriptor,
+a buffer, and buffer length. The file descriptor is where we are reading from,
+and we are reading length to buffer. The syscall returns the difference between
+the number of disk accesses between pass 1 and pass 2. We expect that the number
+of accesses to disk with a cold cache will be higher than with a cache already
+filled. We expect that if our test passes, we will indeed have accessed the disk
+more times with a cold cache.
+
+The .output is:
+Copying tests/filesys/extended/student-test-1 to scratch partition...
+Copying tests/filesys/extended/tar to scratch partition...
+qemu -hda /tmp/O8l_GAiwWs.dsk -hdb tmp.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...........
+Kernel command line: -q -f extract run student-test-1
+Pintos booting with 4,088 kB RAM...
+382 pages available in kernel pool.
+382 pages available in user pool.
+Calibrating timer...  419,020,800 loops/s.
+hda: 1,008 sectors (504 kB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 177 sectors (88 kB), Pintos OS kernel (20)
+hda2: 235 sectors (117 kB), Pintos scratch (22)
+hdb: 5,040 sectors (2 MB), model "QM00002", serial "QEMU HARDDISK"
+hdb1: 4,096 sectors (2 MB), Pintos file system (21)
+filesys: using hdb1
+scratch: using hda2
+Formatting file system...done.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'student-test-1' into the file system...
+Putting 'tar' into the file system...
+Erasing ustar archive...
+Executing 'student-test-1':
+(student-test-1) begin
+(student-test-1) create "testfile"
+(student-test-1) open "testfile"
+(student-test-1) true
+(student-test-1) test hitrate
+(student-test-1) close "testfile"
+(student-test-1) end
+student-test-1: exit(0)
+Execution of 'student-test-1' complete.
+Timer: 59 ticks
+Thread: 0 idle ticks, 58 kernel ticks, 1 user ticks
+hdb1 (filesys): 268 reads, 477 writes
+hda2 (scratch): 234 reads, 2 writes
+Console: 1183 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+The .result is
+PASS
+
+Two non-trivial kernel errors could be:
+If the kernel did not change the block access count when syscalls to read and
+write were made, then the output would say that they have an equal number of
+hit rates for both a cold and warmed cache.
+
+If the kernel did not synchronize reads correctly, and had a race condition on
+the counters, the counts would be wrong, and the output may print out different,
+incorrect values.
+
+Test 2
+This test is to see if our cache can coalesce writes to the same sector. If it
+passes our test, that means that the cache is behaving optimally in evicting and
+accessing block sectors correctly. The cache will be correctly following the clock
+algorithm when it is necessary to evict because we are working with a file that is
+twice as large as the cache.
+
+The test case works by writing byte by byte to a file that is twice as large as
+our cache. We then do the same process with reads. Given that it works, our read
+and write counts should be on the order of 128 because 64KB is 128 blocks. In
+order to do this we added a syscall called coalesce which writes a 64KB file and
+then read the file again. After it finishes reading, it makes sure that the
+counter is on the order of 128.
+
+.result:
+PASS
+.output:
+Copying tests/filesys/extended/student-test-2 to scratch partition...
+Copying tests/filesys/extended/tar to scratch partition...
+qemu -hda /tmp/myj9wRsPMf.dsk -hdb tmp.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...........
+Kernel command line: -q -f extract run student-test-2
+Pintos booting with 4,088 kB RAM...
+382 pages available in kernel pool.
+382 pages available in user pool.
+Calibrating timer...  386,252,800 loops/s.
+hda: 1,008 sectors (504 kB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 177 sectors (88 kB), Pintos OS kernel (20)
+hda2: 236 sectors (118 kB), Pintos scratch (22)
+hdb: 5,040 sectors (2 MB), model "QM00002", serial "QEMU HARDDISK"
+hdb1: 4,096 sectors (2 MB), Pintos file system (21)
+filesys: using hdb1
+scratch: using hda2
+Formatting file system...done.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'student-test-2' into the file system...
+Putting 'tar' into the file system...
+Erasing ustar archive...
+Executing 'student-test-2':
+(student-test-2) begin
+(student-test-2) create "testfile"
+(student-test-2) open "testfile"
+(student-test-2) true
+(student-test-2) test coalesce
+(student-test-2) close "testfile"
+(student-test-2) end
+student-test-2: exit(0)
+Execution of 'student-test-2' complete.
+Timer: 69 ticks
+Thread: 0 idle ticks, 65 kernel ticks, 4 user ticks
+hdb1 (filesys): 269 reads, 603 writes
+hda2 (scratch): 235 reads, 2 writes
+Console: 1184 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+
+Two non-trivial kernel errors could be:
+If the kernel did not change the block access count when syscalls to read and
+write were made, then the output would say that they have a zero hit and write
+rate, not an order of 128
+If the kernel mistakenly accesses the wrong block in which we are trying to read
+and write to, then the cache will repeatedly evict our entries and access the disk
+too many times.
+
+
+Writing tests for Pintos was very difficult to do. For one, it was very irritating
+have to write a brand new syscall just to access block device statistics not exposed
+to user programs. Another thing that could be better is to make it easier to check
+the output of our tests and compare it to our expected result. It is annoying to
+have to write a .ck file with confusing perl commands in order to check for pass
+behavior. It is also annoying that we cannot print/msg anything, because all outputs
+are read by the Pintos test, you must have matching print/msg statements in the
+.ck file. We learned from writing test cases that our cache did indeed work in
+holding block sectors that were recently used, and maintaining a LRU-like behavior
+when it comes to eviction.

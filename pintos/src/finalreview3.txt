@@ -1,0 +1,91 @@
+Project 3 Final Report
+
+The changes you made since your initial design doc and why you made them (feel
+free to re-iterate what you discussed with your TA in the design review)
+
+Inside ‘struct cache_entry’, we added a ‘list_elem’ struct to make each cache
+entry a member of the list. Instead of using array indices and trying to
+calculate each cache entry with math, we decided that storing all the cache
+entries in a list would be easier and less prone to math errors since we could
+use the built-in functions from <list.c>.
+
+Because we used list_elems to store the cache entries, we had to add helper
+functions to run the clock algorithm. For example, we used a helper function
+“wrapping_list_next” in order to have the the clock wrap around to the first
+element after going through the entire cache. Similarly, we introduced many
+new helper functions that assisted in the implementation of the buffer cache,
+such as “cache_read_sector_to_clock_sector”, which reads the cache_entry from
+the disk directly into the cache entry the clock hand is pointing to.
+
+Since we were stuck on inodes for a long time, we created multiple iterations
+of our inode implementations in an attempt to get it to work. We first started
+by creating separate structs for our singly and doubly indirect pointers, which
+didn’t work out too well. After struggling with memory issues for a day, we
+decided to use an inode_index struct which stores the index of a given block
+relative to the entire inode_disk. To support the inode_disk, we have a
+block_of_pointers struct that contains all the pointers for the singly and
+doubly indirect inodes.
+
+One of the major implementations we tried and failed to do successfully was to
+have allocate_sectors() and zero_inode() functions that would be called whenever
+we created an inode. Even though our implementation relied heavily on that, it
+was the source of a memory leak. We made a tough decision to give up on debugging
+it and scrap it; instead, we used memset() and altered byte_to_sector, which
+overall made our implementation have less moving parts and become more lightweight.
+
+In our implementation of the buffer cache, we use cache_get_entry to perform all
+cache reads and write by using memcpy. As a result, in our implementation of
+inode_disk, we had to include a parent field to keep track of the parent directory
+for each inode. This introduced several new helper functions such as get_parent(),
+add_parent(), etc. Adding this field was a contentious issue, as some group members
+felt a better use of time would be to keep debugging our existing implementation,
+while other members felt that adding a parent field would simplify the implementation.
+In the end, we managed to get the parent fields working, and it really helped us
+finish the implementation of inode.
+
+For the directory/subdirectory portion of the project, we followed our design
+doc surprisingly closely and didn’t add or remove and fields from our structs.
+Aside from small changes in dir_create, the only change we made was that in
+file.c, when calling file_close() on a directory, we first check if it is a
+directory. If it is not, we do not allow the thread to call file_allow_write
+because it would decrement the inode’s deny_write field when it isn’t supposed to.
+
+A reflection on the project:
+What exactly did each member do?
+Mei mainly worked on subdirectories since she had a lot of commitments during
+dead week. Brian, Michael and Calvin worked on buffer cache and extensible files.
+Since many of us had outside commitments at various times, we pair programmed on
+different parts of the project. Brian and Michael put in a lot of time trying to
+get inodes working in the filesys, and Calvin and Michael worked on the extended
+student tests for the buffer cache. Toward the end, Mei finished her work on
+subdirectories, and helped to get inode working. When one group member became
+burned out and tired of working on a particular part of the project, we would
+switch roles in order to get a fresh perspective on the problem.
+
+What went well?
+This project didn’t go very well for us. We got stuck on a lot of things for
+very long periods of time and had to use all our slip days and still couldn’t
+finish the project. We were stuck on a bug in buffer cache for a day and half
+that was because we forgot to cast our cache entry to uint8_t. Overall, it was
+quite demoralizing being stuck on simple bugs that were very difficult to test
+and detect. However, despite all the challenges, we were generally optimistic
+throughout the project and supported each other, especially when certain members
+had to take days off for interviews, other projects, etc. This project tested
+our group’s ability to work under pressure, and though we did not do as well as
+hoped on the project, we kept our morale up and maintained a pleasant working
+environment. On our last slip day, we had not made any progress on the autograder
+for two days already, but after sticking through, we managed to get inode and
+extensible files working, which was a surprising last minute breakthrough.
+
+What can we improve?
+In retrospect, we really needed to improve our debugging abilities. Only one
+person in our group was proficient with gdb, and when she had to leave for
+interviews, the rest of the group was a stuck since we couldn’t debug. Other bugs,
+such as the one where we forgot to cast a variable, were just simply hard to
+systematically catch. Though this was the earliest we started a project (we
+learned our lesson from project 2), we still struggled to get things done by the
+deadline. Each of us probably put in a good 50+ hours into this project. Many
+nights, we told ourselves that we would push into the late hours because we felt
+that we were almost there. However, many of late night sessions were quite
+unfruitful, and we probably would have been better off if we went home early and
+came back with fresh minds.

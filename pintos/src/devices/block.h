@@ -71,4 +71,7 @@ struct block *block_register (const char *name, enum block_type,
                               const char *extra_info, block_sector_t size,
                               const struct block_operations *, void *aux);
 
+unsigned long long block_get_read_cnt (struct block *block);
+unsigned long long block_get_write_cnt (struct block *block);
+
 #endif /* devices/block.h */
